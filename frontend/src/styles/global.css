@@ -686,6 +686,239 @@ input[type='text']:invalid:not(:placeholder-shown) {
   white-space: pre;
 }
 
+/* ---------- detection ---------- */
+
+.stack--flush {
+  margin-top: 0;
+}
+
+.severity {
+  display: inline-block;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.severity[data-severity='critical'] {
+  color: var(--sev-critical);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.severity[data-severity='high'] {
+  color: var(--sev-high);
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.severity[data-severity='medium'] {
+  color: var(--sev-medium);
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.severity[data-severity='low'] {
+  color: var(--sev-low);
+}
+
+.severity[data-severity='informational'] {
+  color: var(--sev-info);
+}
+
+.pill[data-alert-status='new'] {
+  color: var(--accent);
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.pill[data-alert-status='investigating'] {
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+.pill[data-alert-status='true_positive'] {
+  color: var(--error);
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.switch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 120ms ease;
+}
+
+.switch[aria-checked='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switch[aria-checked='true'] .switch__thumb {
+  background: #04131c;
+  transform: translateX(14px);
+}
+
+.switch:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.switch:focus-visible,
+.chip:focus-visible,
+.code-input:focus-visible,
+.search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.search,
+.code-input {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.code-input {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  resize: vertical;
+  tab-size: 2;
+}
+
+.table tr.is-muted td {
+  opacity: 0.55;
+}
+
+.tag-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.run-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.run-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.rule-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.breadcrumb {
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.prose {
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plain-list.bullets {
+  list-style: disc;
+  padding-left: 20px;
+}
+
+.test-results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.text-warn {
+  color: var(--warn);
+}
+
+.hit {
+  padding: 10px 12px;
+  border-left: 3px solid var(--warn);
+  background: var(--bg);
+  border-radius: 0 8px 8px 0;
+}
+
+.hit__title {
+  font-weight: 600;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font: inherit;
+  font-size: 12px;
+  text-transform: capitalize;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.chip[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 @media (max-width: 800px) {
   .shell {
     grid-template-columns: 1fr;
@@ -714,7 +947,8 @@ input[type='text']:invalid:not(:placeholder-shown) {
     padding: 20px 16px;
   }
 
-  .grid--wide {
+  .grid--wide,
+  .rule-layout {
     grid-template-columns: 1fr;
   }
 }

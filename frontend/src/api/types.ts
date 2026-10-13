@@ -64,6 +64,15 @@ export interface IngestionJob {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  detection?: DetectionSummary | null;
+}
+
+export interface DetectionSummary {
+  id: number;
+  status: DetectionStatus;
+  hits: number;
+  alerts_created: number;
+  alerts_updated: number;
 }
 
 export interface MalformedSample {
@@ -118,4 +127,132 @@ export interface EventRecord {
 export interface EventPage {
   items: EventRecord[];
   next_cursor: string | null;
+}
+
+// ---------------------------------------------------------------- detection
+
+export type Severity = 'informational' | 'low' | 'medium' | 'high' | 'critical';
+export type RuleType = 'match' | 'threshold' | 'sequence' | 'new_value';
+export type RuleOrigin = 'builtin' | 'custom';
+export type DetectionStatus = 'queued' | 'running' | 'completed' | 'failed';
+
+export interface MitreRef {
+  id: string;
+  name: string | null;
+}
+
+export interface RuleSummary {
+  id: string;
+  title: string;
+  severity: Severity;
+  rule_type: RuleType;
+  origin: RuleOrigin;
+  enabled: boolean;
+  modified: boolean;
+  version: number;
+  tactics: MitreRef[];
+  techniques: MitreRef[];
+  open_alerts: number;
+  total_alerts: number;
+  last_alert_at: string | null;
+  updated_at: string;
+}
+
+export interface RuleDetail extends RuleSummary {
+  description: string;
+  false_positives: string[];
+  references: string[];
+  source_yaml: string;
+  group_by: string[];
+  log_sources: string[];
+}
+
+export interface RuleValidation {
+  valid: boolean;
+  error: string | null;
+  id: string | null;
+  title: string | null;
+  rule_type: RuleType | null;
+}
+
+export interface RuleTestHit {
+  title: string;
+  group: Record<string, string | null>;
+  event_count: number;
+  first_seen: string;
+  last_seen: string;
+  lines: number[];
+}
+
+export interface RuleTestEvent {
+  line: number;
+  timestamp: string;
+  event_action: string | null;
+  event_outcome: string | null;
+  host_name: string | null;
+  user_name: string | null;
+  source_ip: string | null;
+  message: string | null;
+}
+
+export interface RuleTestResult {
+  parser: string;
+  events_parsed: number;
+  truncated: boolean;
+  malformed_count: number;
+  malformed: MalformedSample[];
+  hits: RuleTestHit[];
+  matched_events: RuleTestEvent[];
+}
+
+export interface DetectionRun {
+  id: number;
+  trigger: 'ingestion' | 'manual';
+  status: DetectionStatus;
+  ingest_job_id: number | null;
+  rule_ids: string[] | null;
+  range_start: string | null;
+  range_end: string | null;
+  events_scanned: number;
+  hits: number;
+  alerts_created: number;
+  alerts_updated: number;
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+// ---------------------------------------------------------------- alerts
+
+export type AlertStatus = 'new' | 'investigating' | 'true_positive' | 'false_positive' | 'closed';
+
+export interface AlertSummary {
+  id: number;
+  rule_id: string | null;
+  title: string;
+  severity: Severity;
+  status: AlertStatus;
+  first_seen: string;
+  last_seen: string;
+  event_count: number;
+  host_name: string | null;
+  source_ip: string | null;
+  user_name: string | null;
+  mitre_tactics: string[];
+  mitre_techniques: string[];
+  case_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlertPage {
+  items: AlertSummary[];
+  total: number;
+}
+
+export interface AlertDetail extends AlertSummary {
+  enrichment: Record<string, unknown>;
+  rule: { id: string; title: string; description: string; false_positives: string[] } | null;
+  evidence: EventRecord[];
 }

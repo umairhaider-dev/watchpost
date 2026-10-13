@@ -4,6 +4,8 @@ import { useHealth } from '../api/queries';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', end: true },
+  { to: '/alerts', label: 'Alerts', end: false },
+  { to: '/rules', label: 'Rules', end: false },
   { to: '/ingest', label: 'Ingest', end: false },
   { to: '/events', label: 'Events', end: false },
   { to: '/schema', label: 'Event schema', end: false },

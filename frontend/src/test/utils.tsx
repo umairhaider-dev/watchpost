@@ -18,23 +18,31 @@ export function renderAt(path: string) {
   );
 }
 
+export interface StubRequest {
+  method: string;
+  body: unknown;
+}
+
 type Responder = (
   path: string,
   params: URLSearchParams,
-) => { status: number; body: unknown } | undefined;
+  request: StubRequest,
+) => { status: number; body?: unknown } | undefined;
 
 /** Replace ``fetch`` with a stub that answers API paths via ``respond``. */
 export function stubApi(respond: Responder) {
-  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     const url = new URL(raw, 'http://localhost');
     const path = url.pathname.replace(/^\/api/, '');
-    const reply = respond(path, url.searchParams) ?? {
+    const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+    const reply = respond(path, url.searchParams, { method: init?.method ?? 'GET', body }) ?? {
       status: 404,
       body: { detail: 'Not Found' },
     };
+    const payload = reply.status === 204 ? null : JSON.stringify(reply.body ?? null);
     return Promise.resolve(
-      new Response(JSON.stringify(reply.body), {
+      new Response(payload, {
         status: reply.status,
         headers: { 'Content-Type': 'application/json' },
       }),

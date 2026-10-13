@@ -60,6 +60,27 @@ export async function apiGet<T>(path: string, options: RequestOptions = {}): Pro
   return (await response.json()) as T;
 }
 
+export type WriteMethod = 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+/** Send a JSON request; returns the parsed response (undefined for 204). */
+export async function apiSend<T>(method: WriteMethod, path: string, body?: unknown): Promise<T> {
+  const init: RequestInit = { method, headers: { Accept: 'application/json' } };
+  if (body !== undefined) {
+    init.headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
+    init.body = JSON.stringify(body);
+  }
+  const response = await fetch(`${API_PREFIX}${path}`, init);
+  if (!response.ok) {
+    const errorBody: unknown = await response.json().catch(() => null);
+    throw new ApiError(
+      response.status,
+      errorDetail(errorBody) ?? `${method} ${path} failed with HTTP ${response.status}`,
+    );
+  }
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
 export interface UploadOptions {
   parser: string;
   hostName?: string;

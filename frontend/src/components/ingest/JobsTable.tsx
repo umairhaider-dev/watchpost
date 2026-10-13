@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react';
+import { Link } from 'react-router';
 
 import { useIngestionJobs } from '../../api/queries';
 import type { IngestionJob } from '../../api/types';
@@ -7,7 +8,7 @@ import { Card } from '../Card';
 import { JobStatusBadge } from '../JobStatusBadge';
 import { JobDetails } from './JobDetails';
 
-const COLUMN_COUNT = 8;
+const COLUMN_COUNT = 9;
 
 function StatusCell({ job }: { job: IngestionJob }) {
   return (
@@ -17,6 +18,21 @@ function StatusCell({ job }: { job: IngestionJob }) {
         <span className="muted small">{progressPercent(job.bytes_processed, job.file_size)}%</span>
       ) : null}
     </span>
+  );
+}
+
+function DetectionCell({ job }: { job: IngestionJob }) {
+  const run = job.detection;
+  if (!run) return <span className="muted small">—</span>;
+  if (run.status !== 'completed') return <JobStatusBadge status={run.status} />;
+  if (run.alerts_created + run.alerts_updated === 0) {
+    return <span className="muted small">none</span>;
+  }
+  return (
+    <Link className="link small" to="/alerts">
+      {run.alerts_created} new
+      {run.alerts_updated > 0 ? `, ${String(run.alerts_updated)} updated` : null}
+    </Link>
   );
 }
 
@@ -53,6 +69,7 @@ export function JobsTable() {
                 <th scope="col" className="numeric">
                   Malformed
                 </th>
+                <th scope="col">Alerts</th>
                 <th scope="col" className="numeric">
                   Size
                 </th>
@@ -91,6 +108,9 @@ export function JobsTable() {
                       <td className="numeric">{formatNumber(job.events_duplicate)}</td>
                       <td className="numeric" data-alert={job.records_malformed > 0}>
                         {formatNumber(job.records_malformed)}
+                      </td>
+                      <td>
+                        <DetectionCell job={job} />
                       </td>
                       <td className="numeric">{formatBytes(job.file_size)}</td>
                       <td className="numeric">{formatDuration(job.started_at, job.finished_at)}</td>

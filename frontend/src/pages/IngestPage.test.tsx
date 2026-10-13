@@ -171,4 +171,31 @@ describe('IngestPage', () => {
 
     expect(await screen.findByText('Failed')).toBeInTheDocument();
   });
+
+  it('shows what detection found for each job', async () => {
+    const detection = {
+      id: 3,
+      status: 'completed' as const,
+      hits: 7,
+      alerts_created: 6,
+      alerts_updated: 1,
+    };
+    jobs = [
+      job({ id: 7, detection }),
+      job({
+        id: 8,
+        filename: 'quiet.log',
+        detection: { ...detection, alerts_created: 0, alerts_updated: 0 },
+      }),
+      job({ id: 9, filename: 'pending.log', detection: { ...detection, status: 'running' } }),
+    ];
+    renderAt('/ingest');
+
+    expect(await screen.findByRole('link', { name: '6 new, 1 updated' })).toHaveAttribute(
+      'href',
+      '/alerts',
+    );
+    expect(screen.getByText('none')).toBeInTheDocument();
+    expect(screen.getByText('Running')).toBeInTheDocument();
+  });
 });
