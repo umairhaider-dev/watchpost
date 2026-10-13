@@ -15,6 +15,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    ForeignKey,
     Identity,
     Index,
     Integer,
@@ -72,6 +73,10 @@ class Event(Base):
     message: Mapped[str | None] = mapped_column(Text)
     ioc_matched: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     raw_event: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    # The job that first stored this event; detection runs scan exactly these.
+    ingest_job_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("ingestion_jobs.id", ondelete="SET NULL")
+    )
 
     __table_args__ = (
         # (timestamp, id) gives stable keyset pagination for the event search.
@@ -81,6 +86,7 @@ class Event(Base):
         Index("ix_events_user_name_timestamp", "user_name", "timestamp"),
         Index("ix_events_host_name_timestamp", "host_name", "timestamp"),
         Index("ix_events_category_action", "event_category", "event_action"),
+        Index("ix_events_ingest_job_id", "ingest_job_id"),
         Index(
             "ix_events_ioc_matched",
             "timestamp",

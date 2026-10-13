@@ -43,6 +43,30 @@ class RuleType(StrEnum):
     MATCH = "match"  # single-event Sigma-style selection
     THRESHOLD = "threshold"  # N matching events within a window, grouped by a field
     SEQUENCE = "sequence"  # event A followed by event B from the same entity
+    NEW_VALUE = "new_value"  # a value not seen for this entity during a lookback period
+
+
+class RuleOrigin(StrEnum):
+    """Where a rule came from."""
+
+    BUILTIN = "builtin"  # shipped with the platform as a YAML file
+    CUSTOM = "custom"  # created through the API or UI
+
+
+class DetectionTrigger(StrEnum):
+    """Why a detection run was started."""
+
+    INGESTION = "ingestion"  # new events arrived from an ingestion job
+    MANUAL = "manual"  # an analyst asked to scan a time range
+
+
+class DetectionStatus(StrEnum):
+    """Lifecycle of a detection run."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class AlertStatus(StrEnum):

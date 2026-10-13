@@ -117,15 +117,20 @@ def _parse_json(
         yield event
 
 
-def take_rows(events: Iterator[NormalizedEvent], size: int) -> list[dict[str, Any]]:
+def take_rows(
+    events: Iterator[NormalizedEvent], size: int, ingest_job_id: int | None = None
+) -> list[dict[str, Any]]:
     """Pull up to ``size`` events and convert them to insert rows.
 
     Kept separate so the worker can run it in a thread while the event loop
-    stays free for database I/O.
+    stays free for database I/O. ``ingest_job_id`` tags each row with the job
+    that stored it, so detection can later scan exactly that job's events.
     """
     rows: list[dict[str, Any]] = []
     for event in events:
-        rows.append(event.to_row())
+        row = event.to_row()
+        row["ingest_job_id"] = ingest_job_id
+        rows.append(row)
         if len(rows) >= size:
             break
     return rows

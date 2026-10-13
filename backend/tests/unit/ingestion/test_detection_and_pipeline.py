@@ -139,3 +139,12 @@ def test_take_rows_batches(context: ParseContext) -> None:
 
     assert [len(batch) for batch in (first, second, third, rest)] == [20, 20, 5, 0]
     assert {"event_hash", "raw_event", "timestamp"} <= set(first[0])
+    assert first[0]["ingest_job_id"] is None
+
+
+def test_take_rows_tags_the_ingestion_job(context: ParseContext) -> None:
+    with LogFile.open(SAMPLES / "auth.log") as log_file:
+        events = parse_events(log_file.stream, LinuxAuthParser(context), ParseStats())
+        rows = take_rows(events, 5, ingest_job_id=42)
+
+    assert {row["ingest_job_id"] for row in rows} == {42}

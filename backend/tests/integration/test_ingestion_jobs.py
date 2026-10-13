@@ -43,7 +43,7 @@ def copy_sample(name: str, directory: Path) -> Path:
     return target
 
 
-async def count_events(session: AsyncSession, **filters: str) -> int:
+async def count_events(session: AsyncSession, **filters: object) -> int:
     query = select(func.count()).select_from(Event)
     for column, value in filters.items():
         query = query.where(getattr(Event, column) == value)
@@ -90,6 +90,7 @@ async def test_samples_ingest_cleanly(
     assert job.bytes_processed == size
     assert job.started_at is not None and job.finished_at is not None
     assert await count_events(db_session, log_source=log_source) == events
+    assert await count_events(db_session, ingest_job_id=job.id) == events
 
 
 async def test_reingesting_the_same_file_only_counts_duplicates(
@@ -109,6 +110,8 @@ async def test_reingesting_the_same_file_only_counts_duplicates(
     assert second.events_inserted == 0
     assert second.events_duplicate == 45
     assert await count_events(db_session) == 45
+    # Duplicates keep pointing at the job that stored them first.
+    assert await count_events(db_session, ingest_job_id=first.id) == 45
 
 
 async def test_malformed_lines_are_counted_and_reported(

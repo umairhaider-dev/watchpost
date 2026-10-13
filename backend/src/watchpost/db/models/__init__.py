@@ -3,15 +3,19 @@
 from watchpost.db.models.alert import OPEN_ALERT_STATUSES, Alert, alert_events
 from watchpost.db.models.audit import AuditLog
 from watchpost.db.models.case import Case, CaseNote
+from watchpost.db.models.detection import DetectionRun
 from watchpost.db.models.enums import (
     AlertStatus,
     CaseStatus,
+    DetectionStatus,
+    DetectionTrigger,
     EventCategory,
     EventOutcome,
     IngestOrigin,
     IngestStatus,
     IocType,
     LogSource,
+    RuleOrigin,
     RuleType,
     Severity,
     UserRole,
@@ -30,6 +34,9 @@ __all__ = [
     "Case",
     "CaseNote",
     "CaseStatus",
+    "DetectionRun",
+    "DetectionStatus",
+    "DetectionTrigger",
     "Event",
     "EventCategory",
     "EventOutcome",
@@ -40,6 +47,7 @@ __all__ = [
     "IocType",
     "LogSource",
     "Rule",
+    "RuleOrigin",
     "RuleType",
     "Severity",
     "User",

@@ -113,7 +113,7 @@ async def _ingest(
     with LogFile.open(job.stored_path) as log_file:
         events = parse_events(log_file.stream, parser, stats)
         while True:
-            rows = await asyncio.to_thread(take_rows, events, settings.ingest_batch_size)
+            rows = await asyncio.to_thread(take_rows, events, settings.ingest_batch_size, job.id)
             if not rows:
                 break
             async with session_factory() as session:

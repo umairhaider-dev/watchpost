@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Boolean, Index, Integer, String, Text, text, true
+from sqlalchemy import Boolean, Index, Integer, String, Text, false, text, true
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from watchpost.db.base import Base, TimestampMixin, str_enum
-from watchpost.db.models.enums import RuleType, Severity
+from watchpost.db.models.enums import RuleOrigin, RuleType, Severity
 
 
 class Rule(TimestampMixin, Base):
@@ -42,6 +42,13 @@ class Rule(TimestampMixin, Base):
     source_yaml: Mapped[str] = mapped_column(Text)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    origin: Mapped[RuleOrigin] = mapped_column(
+        str_enum(RuleOrigin, "rule_origin"),
+        default=RuleOrigin.CUSTOM,
+        server_default=RuleOrigin.CUSTOM,
+    )
+    # A built-in rule edited through the API; rule sync then leaves it alone.
+    modified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     __table_args__ = (
         Index("ix_rules_enabled", "enabled"),
