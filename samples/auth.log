@@ -1,0 +1,45 @@
+Oct 12 08:01:12 web-01 sshd[1021]: Server listening on 0.0.0.0 port 22.
+Oct 12 08:15:03 web-01 sshd[2210]: Accepted publickey for deploy from 10.20.0.15 port 51522 ssh2: ED25519 SHA256:3m9qKfP0wTgQ7cE2bYx1nV8uR5sL4hJ6aZ0dF2gH1kM
+Oct 12 08:15:03 web-01 sshd[2210]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)
+Oct 12 08:15:04 web-01 systemd-logind[612]: New session 41 of user deploy.
+Oct 12 08:17:44 web-01 sudo:   deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Oct 12 08:17:44 web-01 sudo: pam_unix(sudo:session): session opened for user root(uid=0) by deploy(uid=1001)
+Oct 12 08:17:45 web-01 sudo: pam_unix(sudo:session): session closed for user root
+Oct 12 08:30:01 web-01 CRON[2301]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Oct 12 08:30:01 web-01 CRON[2301]: pam_unix(cron:session): session closed for user root
+Oct 12 09:02:11 web-01 sshd[3101]: Invalid user admin from 203.0.113.45 port 40112
+Oct 12 09:02:13 web-01 sshd[3101]: Failed password for invalid user admin from 203.0.113.45 port 40112 ssh2
+Oct 12 09:02:14 web-01 sshd[3101]: Connection closed by invalid user admin 203.0.113.45 port 40112 [preauth]
+Oct 12 09:02:15 web-01 sshd[3104]: Failed password for root from 203.0.113.45 port 40118 ssh2
+Oct 12 09:02:17 web-01 sshd[3104]: Failed password for root from 203.0.113.45 port 40118 ssh2
+Oct 12 09:02:19 web-01 sshd[3104]: Failed password for root from 203.0.113.45 port 40118 ssh2
+Oct 12 09:02:20 web-01 sshd[3107]: Invalid user ubuntu from 203.0.113.45 port 40126
+Oct 12 09:02:22 web-01 sshd[3107]: Failed password for invalid user ubuntu from 203.0.113.45 port 40126 ssh2
+Oct 12 09:02:23 web-01 sshd[3109]: Invalid user oracle from 203.0.113.45 port 40131
+Oct 12 09:02:25 web-01 sshd[3109]: Failed password for invalid user oracle from 203.0.113.45 port 40131 ssh2
+Oct 12 09:02:26 web-01 sshd[3111]: Invalid user test from 203.0.113.45 port 40139
+Oct 12 09:02:28 web-01 sshd[3111]: Failed password for invalid user test from 203.0.113.45 port 40139 ssh2
+Oct 12 09:02:29 web-01 sshd[3120]: Failed password for root from 203.0.113.45 port 40160 ssh2
+Oct 12 09:02:31 web-01 sshd[3120]: error: maximum authentication attempts exceeded for root from 203.0.113.45 port 40160 ssh2 [preauth]
+Oct 12 09:02:31 web-01 sshd[3120]: Disconnecting authenticating user root 203.0.113.45 port 40160: Too many authentication failures [preauth]
+Oct 12 09:02:40 web-01 sshd[3125]: pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.45  user=backup
+Oct 12 09:02:42 web-01 sshd[3125]: Failed password for backup from 203.0.113.45 port 40171 ssh2
+Oct 12 09:02:51 web-01 sshd[3127]: Failed password for backup from 203.0.113.45 port 40175 ssh2
+Oct 12 09:03:05 web-01 sshd[3130]: Accepted password for backup from 203.0.113.45 port 40180 ssh2
+Oct 12 09:03:05 web-01 sshd[3130]: pam_unix(sshd:session): session opened for user backup(uid=1002) by (uid=0)
+Oct 12 09:04:10 web-01 sudo:   backup : TTY=pts/1 ; PWD=/home/backup ; USER=root ; COMMAND=/usr/bin/cat /etc/shadow
+Oct 12 09:04:30 web-01 sudo:   backup : TTY=pts/1 ; PWD=/home/backup ; USER=root ; COMMAND=/usr/sbin/useradd -m -s /bin/bash svc-update
+Oct 12 09:04:30 web-01 useradd[3150]: new group: name=svc-update, GID=1003
+Oct 12 09:04:30 web-01 useradd[3150]: new user: name=svc-update, UID=1003, GID=1003, home=/home/svc-update, shell=/bin/bash, from=/dev/pts/1
+Oct 12 09:04:45 web-01 sudo:   backup : TTY=pts/1 ; PWD=/home/backup ; USER=root ; COMMAND=/usr/sbin/usermod -aG sudo svc-update
+Oct 12 09:04:45 web-01 usermod[3155]: add 'svc-update' to group 'sudo'
+Oct 12 09:04:45 web-01 usermod[3155]: add 'svc-update' to shadow group 'sudo'
+Oct 12 09:05:02 web-01 passwd[3160]: pam_unix(passwd:chauthtok): password changed for svc-update
+Oct 12 10:12:00 web-01 sudo:    carol : 3 incorrect password attempts ; TTY=pts/2 ; PWD=/home/carol ; USER=root ; COMMAND=/usr/bin/apt update
+Oct 12 10:12:30 web-01 sudo:     dave : user NOT in sudoers ; TTY=pts/3 ; PWD=/home/dave ; USER=root ; COMMAND=/bin/bash
+Oct 12 10:13:00 web-01 su: FAILED SU (to root) dave on pts/3
+Oct 12 10:20:00 web-01 sshd[3301]: Received disconnect from 10.20.0.15 port 51522:11: disconnected by user
+Oct 12 10:20:00 web-01 sshd[3301]: Disconnected from user deploy 10.20.0.15 port 51522
+Oct 12 10:20:00 web-01 sshd[2210]: pam_unix(sshd:session): session closed for user deploy
+Oct 12 11:45:09 web-01 sshd[3400]: Did not receive identification string from 198.51.100.77 port 61000
+Oct 12 11:45:10 web-01 sshd[3401]: Unable to negotiate with 198.51.100.77 port 61002: no matching key exchange method found. Their offer: diffie-hellman-group1-sha1 [preauth]

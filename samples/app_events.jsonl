@@ -1,0 +1,10 @@
+{"timestamp": "2026-10-12T09:40:00Z", "level": "info", "service": "billing-api", "event": "login", "user": "alice", "src_ip": "192.168.1.31", "outcome": "success"}
+{"timestamp": "2026-10-12T09:40:12Z", "level": "info", "service": "billing-api", "event": "invoice_export", "user": "alice", "src_ip": "192.168.1.31", "outcome": "success", "rows": 250}
+{"timestamp": "2026-10-12T09:40:55Z", "level": "warn", "service": "billing-api", "event": "login", "user": "bob", "src_ip": "198.51.100.14", "outcome": "failed", "reason": "bad_password"}
+{"timestamp": "2026-10-12T09:40:57Z", "level": "warn", "service": "billing-api", "event": "login", "user": "bob", "src_ip": "198.51.100.14", "outcome": "failed", "reason": "bad_password"}
+{"timestamp": "2026-10-12T09:40:59Z", "level": "warn", "service": "billing-api", "event": "login", "user": "bob", "src_ip": "198.51.100.14", "outcome": "failed", "reason": "bad_password"}
+{"time": 1791798060000, "hostname": "api-02", "action": "api_key_created", "username": "bob", "client_ip": "198.51.100.14", "result": "ok"}
+{"ts": 1791798150, "hostname": "api-02", "action": "config_changed", "username": "bob", "client_ip": "198.51.100.14", "result": "ok", "setting": "mfa_required", "value": false}
+{"@timestamp": "2026-10-12T09:45:00.000Z", "event": {"category": ["iam"], "action": "password_reset", "outcome": "failure"}, "user": {"name": "carol"}, "source": {"ip": "192.168.1.40"}, "host": {"name": "idp-01"}, "message": "Password reset rejected: token expired"}
+{"@timestamp": "2026-10-12T09:46:10.000Z", "event": {"category": ["web"], "action": "file_download"}, "user": {"name": "carol"}, "source": {"ip": "192.168.1.40"}, "url": {"original": "/reports/q3.pdf"}, "http": {"request": {"method": "GET"}, "response": {"status_code": 200}}, "host": {"name": "files-01"}}
+{"timestamp": "2026-10-12T09:50:00Z", "level": "error", "service": "billing-api", "msg": "upstream timeout talking to payments", "status_code": 504, "path": "/api/v1/payments", "method": "POST"}

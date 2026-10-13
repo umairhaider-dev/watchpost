@@ -1,0 +1,7 @@
+Oct 12 12:00:01 web-02 sshd[4100]: Accepted publickey for deploy from 10.20.0.15 port 52000 ssh2
+this line is not syslog at all
+Oct 12 12:00:05 web-02 sshd[4101]: Failed password for root from 203.0.113.45 port 52011 ssh2
+Oct 32 12:00:06 web-02 sshd[4102]: Failed password for root from 203.0.113.45 port 52012 ssh2
+Oct 12 12:00:07 web-02 sshd[4103]: Failed password for root from 203.0.113.45 port 52013 ssh2
+Oct 12 12:0
+Oct 12 12:00:09 web-02 sudo:   deploy : TTY=pts/0 ; PWD=/srv ; USER=root ; COMMAND=/usr/bin/journalctl -u nginx
