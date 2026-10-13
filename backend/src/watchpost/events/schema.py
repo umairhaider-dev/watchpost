@@ -1,0 +1,140 @@
+"""Pydantic model for a normalised event (inspired by Elastic Common Schema).
+
+Parsers build :class:`NormalizedEvent` instances; the ingestion pipeline turns
+them into ``events`` rows with :meth:`NormalizedEvent.to_row`, and the
+detection engine reads them through :meth:`NormalizedEvent.flatten`, which
+uses the same dotted names as the rule YAML (``source.ip``,
+``process.command_line``, ...).
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from ipaddress import IPv4Address, IPv6Address
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress, field_validator
+
+from watchpost.db.models.enums import EventCategory, EventOutcome, LogSource
+from watchpost.events.fields import FIELDS, FieldSpec
+
+_SHA256_HEX = r"^[0-9a-f]{64}$"
+
+
+class _Section(BaseModel):
+    """Base for nested ECS field groups."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class HostFields(_Section):
+    name: str | None = Field(default=None, max_length=255)
+
+
+class EndpointFields(_Section):
+    ip: IPvAnyAddress | None = None
+    port: int | None = Field(default=None, ge=0, le=65535)
+
+
+class UserFields(_Section):
+    name: str | None = Field(default=None, max_length=255)
+
+
+class EventFields(_Section):
+    category: EventCategory | None = None
+    action: str | None = Field(default=None, max_length=128)
+    outcome: EventOutcome | None = None
+    code: str | None = Field(default=None, max_length=32)
+
+
+class ParentProcessFields(_Section):
+    name: str | None = Field(default=None, max_length=255)
+    pid: int | None = Field(default=None, ge=0)
+
+
+class ProcessFields(_Section):
+    name: str | None = Field(default=None, max_length=255)
+    pid: int | None = Field(default=None, ge=0)
+    executable: str | None = None
+    command_line: str | None = None
+    parent: ParentProcessFields = Field(default_factory=ParentProcessFields)
+
+
+class UrlFields(_Section):
+    original: str | None = None
+
+
+class HttpRequestFields(_Section):
+    method: str | None = Field(default=None, max_length=16)
+
+
+class HttpResponseFields(_Section):
+    status_code: int | None = Field(default=None, ge=100, le=599)
+
+
+class HttpFields(_Section):
+    request: HttpRequestFields = Field(default_factory=HttpRequestFields)
+    response: HttpResponseFields = Field(default_factory=HttpResponseFields)
+
+
+class UserAgentFields(_Section):
+    original: str | None = None
+
+
+class NormalizedEvent(BaseModel):
+    """A parsed log record in the platform's common schema."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    timestamp: datetime
+    log_source: LogSource
+    event_hash: str = Field(pattern=_SHA256_HEX)
+    raw_event: dict[str, Any]
+
+    host: HostFields = Field(default_factory=HostFields)
+    source: EndpointFields = Field(default_factory=EndpointFields)
+    destination: EndpointFields = Field(default_factory=EndpointFields)
+    user: UserFields = Field(default_factory=UserFields)
+    event: EventFields = Field(default_factory=EventFields)
+    process: ProcessFields = Field(default_factory=ProcessFields)
+    url: UrlFields = Field(default_factory=UrlFields)
+    http: HttpFields = Field(default_factory=HttpFields)
+    user_agent: UserAgentFields = Field(default_factory=UserAgentFields)
+    message: str | None = None
+
+    @field_validator("timestamp")
+    @classmethod
+    def _to_utc(cls, value: datetime) -> datetime:
+        """Store every timestamp in UTC; naive values are assumed to be UTC already."""
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    def get(self, spec: FieldSpec) -> Any:
+        """Return the value of a registry field, converted to a plain Python type."""
+        node: Any = self
+        for part in spec.path:
+            node = getattr(node, part)
+            if node is None:
+                return None
+        if isinstance(node, IPv4Address | IPv6Address):
+            return str(node)
+        if isinstance(node, LogSource | EventCategory | EventOutcome):
+            return node.value
+        return node
+
+    def flatten(self) -> dict[str, Any]:
+        """Return ``{dotted_name: value}`` for every populated registry field."""
+        flat: dict[str, Any] = {}
+        for spec in FIELDS:
+            value = self.get(spec)
+            if value is not None:
+                flat[spec.name] = value
+        return flat
+
+    def to_row(self) -> dict[str, Any]:
+        """Return a dict ready for a bulk insert into the ``events`` table."""
+        row = {spec.column: self.get(spec) for spec in FIELDS}
+        row["event_hash"] = self.event_hash
+        row["raw_event"] = self.raw_event
+        return row
