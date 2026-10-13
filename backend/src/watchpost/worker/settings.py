@@ -22,6 +22,7 @@ from watchpost.worker.tasks import (
     WorkerContext,
     ingest_file,
     ping,
+    run_detection,
     scan_watch_folder_job,
     worker_context,
 )
@@ -71,7 +72,7 @@ def build_cron_jobs(settings: Settings) -> list[CronJob]:
 class WorkerSettings:
     """Settings object read by the ``arq`` CLI."""
 
-    functions: ClassVar[list[WorkerCoroutine]] = [ping, ingest_file]
+    functions: ClassVar[list[WorkerCoroutine]] = [ping, ingest_file, run_detection]
     cron_jobs: ClassVar[list[CronJob]] = build_cron_jobs(get_settings())
     on_startup: ClassVar[StartupShutdown] = startup
     on_shutdown: ClassVar[StartupShutdown] = shutdown

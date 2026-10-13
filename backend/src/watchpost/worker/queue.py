@@ -15,12 +15,15 @@ logger = logging.getLogger(__name__)
 
 QUEUE_NAME = "watchpost:queue"
 INGEST_FILE_JOB = "ingest_file"
+DETECTION_JOB = "run_detection"
 
 
 class JobQueue(Protocol):
     """Something that can schedule ingestion jobs."""
 
     async def enqueue_ingestion(self, job_id: int) -> None: ...
+
+    async def enqueue_detection(self, run_id: int) -> None: ...
 
 
 class ArqJobQueue:
@@ -40,3 +43,13 @@ class ArqJobQueue:
         )
         if job is None:
             logger.info("Ingestion job %d is already queued", job_id)
+
+    async def enqueue_detection(self, run_id: int) -> None:
+        job = await self._redis.enqueue_job(
+            DETECTION_JOB,
+            run_id,
+            _job_id=f"detect:{run_id}",
+            _queue_name=self._queue_name,
+        )
+        if job is None:
+            logger.info("Detection run %d is already queued", run_id)

@@ -12,10 +12,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from arq.connections import ArqRedis
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from watchpost.core.config import Settings
+from watchpost.db.models import DetectionTrigger, IngestionJob, IngestStatus
+from watchpost.detection.runner import create_run, execute_run
 from watchpost.ingestion.jobs import run_ingestion_job
 from watchpost.ingestion.watcher import scan_watch_folder
 from watchpost.worker.queue import ArqJobQueue, JobQueue
@@ -62,9 +64,34 @@ async def ping(ctx: dict[str, Any]) -> str:
 
 
 async def ingest_file(ctx: dict[str, Any], job_id: int) -> str:
-    """Parse and store the file behind ingestion job ``job_id``."""
+    """Parse and store the file behind ingestion job ``job_id``, then queue detection."""
     wctx = worker_context(ctx)
     status = await run_ingestion_job(wctx.session_factory, wctx.settings, job_id)
+    if status is IngestStatus.COMPLETED:
+        await queue_detection_for_job(wctx.session_factory, job_queue(ctx), job_id)
+    return status.value if status is not None else "skipped"
+
+
+async def queue_detection_for_job(
+    session_factory: async_sessionmaker[AsyncSession], queue: JobQueue, job_id: int
+) -> int | None:
+    """Queue a detection run over the events a job inserted; ``None`` if it inserted none."""
+    async with session_factory() as session:
+        inserted = await session.scalar(
+            select(IngestionJob.events_inserted).where(IngestionJob.id == job_id)
+        )
+        if not inserted:
+            return None
+        run = await create_run(session, trigger=DetectionTrigger.INGESTION, ingest_job_id=job_id)
+        run_id = run.id
+        await session.commit()
+    await queue.enqueue_detection(run_id)
+    return run_id
+
+
+async def run_detection(ctx: dict[str, Any], run_id: int) -> str:
+    """Evaluate the rules for detection run ``run_id`` and record alerts."""
+    status = await execute_run(worker_context(ctx).session_factory, run_id)
     return status.value if status is not None else "skipped"
 
 

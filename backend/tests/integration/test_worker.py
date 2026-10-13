@@ -10,8 +10,8 @@ from arq.connections import ArqRedis
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from watchpost.core.config import Settings
-from watchpost.db.models import IngestionJob, IngestOrigin
-from watchpost.worker.queue import INGEST_FILE_JOB, QUEUE_NAME, ArqJobQueue
+from watchpost.db.models import DetectionRun, DetectionTrigger, IngestionJob, IngestOrigin
+from watchpost.worker.queue import DETECTION_JOB, INGEST_FILE_JOB, QUEUE_NAME, ArqJobQueue
 from watchpost.worker.settings import WorkerSettings, build_cron_jobs, shutdown, startup
 from watchpost.worker.tasks import (
     CONTEXT_KEY,
@@ -19,6 +19,8 @@ from watchpost.worker.tasks import (
     ingest_file,
     job_queue,
     ping,
+    queue_detection_for_job,
+    run_detection,
     scan_watch_folder_job,
     worker_context,
 )
@@ -79,6 +81,7 @@ def test_worker_context_rejects_wrong_type() -> None:
 def test_worker_settings_register_jobs() -> None:
     assert ping in WorkerSettings.functions
     assert ingest_file in WorkerSettings.functions
+    assert run_detection in WorkerSettings.functions
     assert WorkerSettings.queue_name == QUEUE_NAME
     assert WorkerSettings.redis_settings.host
 
@@ -112,10 +115,45 @@ async def test_ingest_file_task(
     )
     db_session.add(job)
     await db_session.flush()
-    ctx = make_ctx(app_settings, engine, session_factory)
+    redis = FakeArqRedis()
+    ctx = make_ctx(app_settings, engine, session_factory, redis)
 
     assert await ingest_file(ctx, job.id) == "completed"
     assert await ingest_file(ctx, job.id) == "skipped"
+
+    # A completed ingestion queues a detection run over the new events.
+    [(function, (run_id,), kwargs)] = redis.calls
+    assert function == DETECTION_JOB
+    assert kwargs["_job_id"] == f"detect:{run_id}"
+    run = await db_session.get(DetectionRun, run_id)
+    assert run is not None
+    assert run.ingest_job_id == job.id
+    assert run.trigger is DetectionTrigger.INGESTION
+
+    assert await run_detection(ctx, run_id) == "completed"
+    assert await run_detection(ctx, run_id) == "skipped"
+
+
+async def test_no_detection_is_queued_when_nothing_new_was_stored(
+    db_session: AsyncSession, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    job = IngestionJob(
+        origin=IngestOrigin.UPLOAD,
+        filename="dupes.log",
+        stored_path="unused",
+        parser="auto",
+        file_size=1,
+        events_inserted=0,
+    )
+    db_session.add(job)
+    await db_session.flush()
+    queue = ArqJobQueue(FakeArqRedis())
+
+    assert await queue_detection_for_job(session_factory, queue, job.id) is None
+
+
+async def test_enqueue_detection_is_idempotent() -> None:
+    await ArqJobQueue(FakeArqRedis(already_queued=True)).enqueue_detection(3)
 
 
 async def test_scan_job_enqueues_through_arq(

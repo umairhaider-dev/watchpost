@@ -22,6 +22,7 @@ class RecordingQueue:
 
     def __init__(self) -> None:
         self.job_ids: list[int] = []
+        self.detection_runs: list[int] = []
         self.fail = False
 
     async def enqueue_ingestion(self, job_id: int) -> None:
@@ -29,6 +30,12 @@ class RecordingQueue:
             msg = "redis is down"
             raise RedisConnectionError(msg)
         self.job_ids.append(job_id)
+
+    async def enqueue_detection(self, run_id: int) -> None:
+        if self.fail:
+            msg = "redis is down"
+            raise RedisConnectionError(msg)
+        self.detection_runs.append(run_id)
 
 
 @pytest.fixture
