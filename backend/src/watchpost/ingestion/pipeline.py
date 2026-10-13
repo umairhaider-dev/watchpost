@@ -66,6 +66,14 @@ def parse_events(
     stream: ByteStream, parser: Parser, stats: ParseStats
 ) -> Iterator[NormalizedEvent]:
     """Yield events parsed from ``stream``, updating ``stats`` as it goes."""
+    for _number, event in parse_numbered_events(stream, parser, stats):
+        yield event
+
+
+def parse_numbered_events(
+    stream: ByteStream, parser: Parser, stats: ParseStats
+) -> Iterator[tuple[int, NormalizedEvent]]:
+    """Like :func:`parse_events`, with each event's line (or record) number."""
     if isinstance(parser, LineParser):
         yield from _parse_lines(stream, parser, stats)
     elif isinstance(parser, JsonParser):
@@ -77,7 +85,7 @@ def parse_events(
 
 def _parse_lines(
     stream: ByteStream, parser: LineParser, stats: ParseStats
-) -> Iterator[NormalizedEvent]:
+) -> Iterator[tuple[int, NormalizedEvent]]:
     for line in iter_lines(stream):
         stats.records_read += 1
         if line.truncated:
@@ -92,12 +100,12 @@ def _parse_lines(
             stats.skipped += 1
             continue
         stats.events_parsed += 1
-        yield event
+        yield line.number, event
 
 
 def _parse_json(
     stream: ByteStream, parser: JsonParser, stats: ParseStats
-) -> Iterator[NormalizedEvent]:
+) -> Iterator[tuple[int, NormalizedEvent]]:
     peek = getattr(stream, "peek", None)
     head: bytes = peek(4096) if callable(peek) else b""
     for record in iter_json_records(stream, detect_json_layout(head)):
@@ -114,7 +122,7 @@ def _parse_json(
             stats.skipped += 1
             continue
         stats.events_parsed += 1
-        yield event
+        yield record.number, event
 
 
 def take_rows(

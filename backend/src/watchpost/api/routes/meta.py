@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from watchpost.detection.mitre import TACTICS, TECHNIQUES
 from watchpost.events.fields import FIELDS, FieldKind
 
 router = APIRouter(prefix="/meta", tags=["meta"])
@@ -22,3 +23,22 @@ async def list_event_fields() -> list[FieldInfo]:
     return [
         FieldInfo(name=spec.name, kind=spec.kind, description=spec.description) for spec in FIELDS
     ]
+
+
+class MitreItem(BaseModel):
+    id: str
+    name: str
+
+
+class MitreReference(BaseModel):
+    tactics: list[MitreItem]
+    techniques: list[MitreItem]
+
+
+@router.get("/mitre", response_model=MitreReference)
+async def mitre_reference() -> MitreReference:
+    """ATT&CK tactics in matrix order and the technique names the platform knows."""
+    return MitreReference(
+        tactics=[MitreItem(id=key, name=name) for key, name in TACTICS.items()],
+        techniques=[MitreItem(id=key, name=name) for key, name in sorted(TECHNIQUES.items())],
+    )

@@ -4,15 +4,22 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeVar
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 from redis.exceptions import RedisError
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import distinct_on
 
 from watchpost.api.deps import QueueDep, SessionDep, SettingsDep
-from watchpost.db.models import IngestionJob, IngestOrigin, IngestStatus
+from watchpost.db.models import (
+    DetectionRun,
+    DetectionStatus,
+    IngestionJob,
+    IngestOrigin,
+    IngestStatus,
+)
 from watchpost.ingestion.errors import UnsupportedFileError, UploadTooLargeError
 from watchpost.ingestion.parsers import AUTO, PARSERS, is_valid_parser_choice
 from watchpost.ingestion.storage import display_filename, save_upload
@@ -45,6 +52,18 @@ class MalformedSampleOut(BaseModel):
     excerpt: str
 
 
+class DetectionSummary(BaseModel):
+    """The latest detection run over a job's events."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    status: DetectionStatus
+    hits: int
+    alerts_created: int
+    alerts_updated: int
+
+
 class IngestionJobOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -66,10 +85,14 @@ class IngestionJobOut(BaseModel):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    detection: DetectionSummary | None = None
 
 
 class IngestionJobDetail(IngestionJobOut):
     malformed_samples: list[MalformedSampleOut]
+
+
+_JobModel = TypeVar("_JobModel", bound=IngestionJobOut)
 
 
 class IngestionJobPage(BaseModel):
@@ -183,13 +206,39 @@ async def list_ingestion_jobs(
         .offset(offset)
     )
     total = await session.scalar(count)
-    return {"items": list(jobs), "total": total or 0}
+    page = list(jobs)
+    runs = await _latest_detection_runs(session, [job.id for job in page])
+    items = [_with_detection(IngestionJobOut, job, runs.get(job.id)) for job in page]
+    return {"items": items, "total": total or 0}
 
 
 @router.get("/jobs/{job_id}", response_model=IngestionJobDetail)
-async def get_ingestion_job(job_id: int, session: SessionDep) -> IngestionJob:
+async def get_ingestion_job(job_id: int, session: SessionDep) -> IngestionJobDetail:
     """One job, including the first malformed records it reported."""
     job = await session.get(IngestionJob, job_id)
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ingestion job not found")
-    return job
+    runs = await _latest_detection_runs(session, [job.id])
+    return _with_detection(IngestionJobDetail, job, runs.get(job.id))
+
+
+async def _latest_detection_runs(
+    session: SessionDep, job_ids: list[int]
+) -> dict[int, DetectionRun]:
+    if not job_ids:
+        return {}
+    runs = await session.scalars(
+        select(DetectionRun)
+        .where(DetectionRun.ingest_job_id.in_(job_ids))
+        .order_by(DetectionRun.ingest_job_id, DetectionRun.id.desc())
+        .ext(distinct_on(DetectionRun.ingest_job_id))
+    )
+    return {run.ingest_job_id: run for run in runs if run.ingest_job_id is not None}
+
+
+def _with_detection(
+    model: type[_JobModel], job: IngestionJob, run: DetectionRun | None
+) -> _JobModel:
+    out = model.model_validate(job)
+    out.detection = DetectionSummary.model_validate(run) if run is not None else None
+    return out
