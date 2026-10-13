@@ -9,6 +9,7 @@ from watchpost.db.models.enums import (
     CaseStatus,
     DetectionStatus,
     DetectionTrigger,
+    EnrichmentStatus,
     EventCategory,
     EventOutcome,
     IngestOrigin,
@@ -22,6 +23,7 @@ from watchpost.db.models.enums import (
 )
 from watchpost.db.models.event import Event
 from watchpost.db.models.ingestion import IngestionJob
+from watchpost.db.models.intel import EnrichmentCache, event_ioc_matches
 from watchpost.db.models.ioc import Ioc
 from watchpost.db.models.rule import Rule
 from watchpost.db.models.user import User
@@ -37,6 +39,8 @@ __all__ = [
     "DetectionRun",
     "DetectionStatus",
     "DetectionTrigger",
+    "EnrichmentCache",
+    "EnrichmentStatus",
     "Event",
     "EventCategory",
     "EventOutcome",
@@ -53,4 +57,5 @@ __all__ = [
     "User",
     "UserRole",
     "alert_events",
+    "event_ioc_matches",
 ]

@@ -103,6 +103,14 @@ class IocType(StrEnum):
     SHA256 = "sha256"
 
 
+class EnrichmentStatus(StrEnum):
+    """Outcome of an external enrichment lookup, as cached."""
+
+    OK = "ok"
+    NOT_FOUND = "not_found"  # the provider has no record of the indicator
+    ERROR = "error"
+
+
 class IngestOrigin(StrEnum):
     """How a file reached the ingestion pipeline."""
 

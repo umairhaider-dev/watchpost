@@ -134,7 +134,19 @@ def test_minimal_event_only_needs_core_fields() -> None:
         raw_event={},
     )
 
-    assert event.flatten() == {"@timestamp": event.timestamp, "log_source": "json"}
+    assert event.flatten() == {
+        "@timestamp": event.timestamp,
+        "log_source": "json",
+        "threat.matched": False,
+    }
+
+
+def test_threat_match_flag_maps_to_ioc_column() -> None:
+    event = make_event(threat={"matched": True})
+
+    assert event.to_row()["ioc_matched"] is True
+    assert event.flatten()["threat.matched"] is True
+    assert make_event().to_row()["ioc_matched"] is False
 
 
 def test_field_kinds_cover_ip_fields() -> None:

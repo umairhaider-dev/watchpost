@@ -81,6 +81,11 @@ class UserAgentFields(_Section):
     original: str | None = None
 
 
+class ThreatFields(_Section):
+    # Set by indicator matching after parsing, never by parsers.
+    matched: bool = False
+
+
 class NormalizedEvent(BaseModel):
     """A parsed log record in the platform's common schema."""
 
@@ -100,6 +105,7 @@ class NormalizedEvent(BaseModel):
     url: UrlFields = Field(default_factory=UrlFields)
     http: HttpFields = Field(default_factory=HttpFields)
     user_agent: UserAgentFields = Field(default_factory=UserAgentFields)
+    threat: ThreatFields = Field(default_factory=ThreatFields)
     message: str | None = None
 
     @field_validator("timestamp")

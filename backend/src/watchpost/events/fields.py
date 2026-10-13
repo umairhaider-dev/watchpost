@@ -20,6 +20,7 @@ class FieldKind(StrEnum):
     IP = "ip"
     INTEGER = "integer"
     DATETIME = "datetime"
+    BOOLEAN = "boolean"
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +62,12 @@ FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec("http.response.status_code", "http_status_code", FieldKind.INTEGER, "HTTP status."),
     FieldSpec("user_agent.original", "user_agent", FieldKind.TEXT, "Client user agent."),
     FieldSpec("message", "message", FieldKind.TEXT, "Human-readable summary."),
+    FieldSpec(
+        "threat.matched",
+        "ioc_matched",
+        FieldKind.BOOLEAN,
+        "True when the event matched a threat intelligence indicator.",
+    ),
 )
 
 FIELDS_BY_NAME: dict[str, FieldSpec] = {spec.name: spec for spec in FIELDS}
