@@ -6,7 +6,7 @@ documentation IP ranges (`10.0.0.0/8`, `192.168.0.0/16`, `203.0.113.0/24`,
 
 | File | Parser (auto-detected) | What is in it |
 | --- | --- | --- |
-| `auth.log` | `linux_auth` | Normal admin activity, then an SSH brute force from 203.0.113.45 that ends in a successful login, `sudo cat /etc/shadow`, a new user added to the `sudo` group, failed sudo/su attempts and scanner noise. |
+| `auth.log` | `linux_auth` | Normal admin activity, then an SSH brute force from 203.0.113.45 that ends in a successful login as `backup` (who normally connects from 10.20.0.30), `sudo cat /etc/shadow`, a new user added to the `sudo` group, failed sudo/su attempts and scanner noise. |
 | `access.log` | `web_access` | Normal shop traffic, then a scanner (198.51.100.23) probing for admin pages, path traversal, SQL injection with sqlmap, XSS and password guessing, plus a TLS handshake sent to the HTTP port. |
 | `windows_security.jsonl` | `windows` | Security log: password spraying against `administrator`, a successful network logon, encoded PowerShell, a new account added to Administrators, a scheduled task, and the audit log being cleared. |
 | `sysmon.json` | `windows` | Sysmon as a pretty-printed JSON array (EVTX→JSON shape): Word spawning encoded PowerShell, DNS and C2 connection, a dropped binary reading LSASS memory, and a Run-key persistence entry. |
@@ -15,4 +15,4 @@ documentation IP ranges (`10.0.0.0/8`, `192.168.0.0/16`, `203.0.113.0/24`,
 
 Upload them from the **Ingest** page, or copy them into the `watch/` folder.
 Uploading the same file twice inserts nothing new: every event is
-deduplicated by its hash.
+deduplicated by its hash. Together the files trigger every built-in detection rule.

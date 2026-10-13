@@ -38,6 +38,7 @@ WORKDIR /app
 COPY --from=build /opt/venv /opt/venv
 COPY alembic.ini ./
 COPY alembic ./alembic
+COPY rules ./rules
 
 USER watchpost
 

@@ -8,8 +8,8 @@ cases.
 It is a defensive tool only: it reads and analyses logs and never scans, probes or
 modifies other systems.
 
-> **Status:** foundation and log ingestion are in place. Detection, enrichment and case
-> management are being built on top of them.
+> **Status:** foundation, log ingestion and the detection engine are in place.
+> Threat-intel enrichment and case management are being built on top of them.
 
 ## Architecture
 
@@ -150,12 +150,137 @@ Get-WinEvent -LogName Security -MaxEvents 5000 | ForEach-Object {
 Year-less syslog timestamps (`Oct 12 09:02:13`) are resolved against the upload time, or
 the file's modification time for watched files, and are assumed to be UTC.
 
+## Detection
+
+### How it works
+
+Rules are YAML files in [`backend/rules/`](backend/rules). When the stack starts, the
+`migrate` container runs `watchpost sync-rules`, which loads them into the database:
+new files are added, changed files update their rule (keeping whether you enabled or
+disabled it), and rules you edited in the UI are never overwritten.
+
+Every time an ingestion job stores new events, the worker queues a **detection run** over
+exactly those events. You can also scan stored events again from the **Rules** page,
+for example after enabling or writing a rule.
+
+- **Match** rules look at one event at a time.
+- **Threshold** and **sequence** rules also read the events around the new ones (one
+  shared pass per log source), so a brute force split across two uploads is still caught.
+- **New value** rules compare each event with the entity's history over a lookback period.
+
+Hits become alerts grouped by rule and entity (`group_by`, e.g. the source IP). A partial
+unique index allows one *open* alert per group, so further hits update that alert's last
+seen time and event count instead of creating new alerts. Running detection twice over
+the same events changes nothing. Once an alert is closed, new activity opens a new one.
+
+### Writing a rule
+
+Rules use a subset of [Sigma](https://sigmahq.io/): named selections, field modifiers and
+a condition. Fields are the normalised names (`source.ip`, `process.command_line`, ...),
+paths into the raw event (`details.url_decoded`), or, Sigma style, Windows event data
+fields such as `TargetImage`.
+
+```yaml
+id: custom-root-ssh-login            # lowercase letters, digits and dashes
+title: Successful root login over SSH
+description: Root should never log in directly over SSH on our servers.
+severity: high                        # informational, low, medium, high, critical (Sigma: level)
+mitre:
+  tactics: [TA0001]
+  techniques: [T1078]
+logsource:
+  source: linux_auth                  # linux_auth, web_access, windows_security, sysmon, json
+detection:
+  login:
+    event.action: ssh_login
+    event.outcome: success
+    user.name: root
+  trusted_network:
+    source.ip|cidr: 10.0.0.0/8
+  condition: login and not trusted_network
+group_by: [host.name]                 # one open alert per host
+falsepositives:
+  - Break-glass access during an outage
+```
+
+Matching is case-insensitive. A list of values means "any of them"; `*` and `?` are
+wildcards. Modifiers:
+
+| Modifier | Meaning |
+| --- | --- |
+| `contains`, `startswith`, `endswith` | substring tests |
+| `re` (+ `i`, `m`, `s` flags) | regular expression search |
+| `all` | every listed value must match |
+| `cidr` | IP address within a network |
+| `gt`, `gte`, `lt`, `lte` | numeric comparisons |
+| `exists` | the field is present (`true`) or absent (`false`) |
+
+Conditions support `and`, `or`, `not`, parentheses, `1 of selection_*` and `all of them`.
+Three keys extend Sigma for stateful detections:
+
+```yaml
+type: threshold                       # N events (or N distinct values) in a window
+group_by: [source.ip]
+threshold: {count: 10, timeframe: 5m, distinct: user.name}
+
+type: sequence                        # ordered steps by the same entity
+group_by: [source.ip]
+sequence:
+  maxspan: 15m
+  steps:
+    - {name: failures, count: 5, detection: {...}}
+    - {name: success, detection: {...}}
+
+type: new_value                       # a value not seen for this entity before
+group_by: [user.name]
+new_value: {field: source.ip, lookback: 30d}
+```
+
+Open a rule in the UI to edit its YAML, validate it, and **test it against pasted log
+lines**: the result shows which lines would fire, without storing anything.
+
+### Built-in rules
+
+| Rule | Type | Severity | ATT&CK |
+| --- | --- | --- | --- |
+| SSH brute force | threshold | medium | T1110.001 |
+| SSH password spraying | threshold | medium | T1110.003 |
+| SSH brute force followed by a successful login | sequence | high | T1110.001, T1078 |
+| Login from a new source address | new value | medium | T1078 |
+| Local user account created on Linux | match | low | T1136.001 |
+| User added to a Linux admin group | match | high | T1098 |
+| Password hash file read with sudo | match | high | T1003.008 |
+| Windows logon brute force | threshold | medium | T1110 |
+| PowerShell with an encoded command | match | high | T1059.001, T1027 |
+| Windows event log cleared | match | high | T1070.001 |
+| Scheduled task created | match | medium | T1053.005 |
+| Windows user account created | match | low | T1136.001 |
+| Account added to a privileged Windows group | match | high | T1098 |
+| LSASS process memory accessed | match | critical | T1003.001 |
+| Office application started a shell or script host | match | high | T1566.001, T1204.002 |
+| Registry Run key persistence | match | medium | T1547.001 |
+| Web directory and file scanning | threshold | low | T1595.003 |
+| SQL injection attempt in a web request | match | high | T1190 |
+| Path traversal attempt in a web request | match | high | T1190, T1083 |
+| Known attack tool user agent | match | medium | T1595.002 |
+
+Together they map to 19 techniques across 8 of the 14 ATT&CK tactics (Reconnaissance,
+Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential
+Access and Discovery); lateral movement, collection, command and control, exfiltration and
+impact are not covered yet. Each rule documents the attack, the evidence it looks for and
+known false positives, and is tested against a matching and a non-matching example built
+from real log lines. All twenty fire on the logs in `samples/`.
+
+The "new address" rule uses IP addresses; country-level detection needs a GeoIP
+database, which is not bundled so the platform can run fully offline.
+
 ## Data model
 
 | Table | Purpose |
 | --- | --- |
 | `events` | Normalised log events. Unique `event_hash` (SHA-256 of source + raw line) deduplicates re-ingested data. Indexed by time and by entity (IP, user, host). |
-| `rules` | Detection rules: Sigma-style YAML source plus parsed definition, severity, ATT&CK tactics/techniques, enabled flag. |
+| `rules` | Detection rules: Sigma-style YAML source plus parsed definition, severity, ATT&CK tactics/techniques, enabled flag, and whether it is built-in or custom. |
+| `detection_runs` | One row per pass of the rules over an ingestion job's events or a time range, with what it scanned and the alerts it created or updated. |
 | `alerts` | Rule hits. A partial unique index on `group_key` for open alerts makes repeated hits update one alert instead of creating hundreds. |
 | `alert_events` | Links alerts to the evidence events behind them. |
 | `cases` / `case_notes` | Investigations that group alerts, with assignee, status, timestamps and analyst notes. |
@@ -177,6 +302,7 @@ Uses [uv](https://docs.astral.sh/uv/) and Python 3.11+.
 cd backend
 uv sync                                   # create .venv with runtime + dev deps
 uv run alembic upgrade head               # needs WATCHPOST_DATABASE_URL
+uv run watchpost sync-rules               # load backend/rules/ into the database
 uv run uvicorn watchpost.api.app:create_app --factory --reload
 uv run arq watchpost.worker.settings.WorkerSettings
 ```
@@ -223,9 +349,11 @@ backend/
     db/          SQLAlchemy base, session helpers, models
     events/      normalised event schema, field registry, dedup hashing
     ingestion/   readers, parsers, batch pipeline, job runner, folder watcher
+    detection/   rule schema, matchers, conditions, engine, runner, rule sync
     api/         FastAPI app factory, middleware, dependencies, routes
     worker/      arq settings, queue and jobs
   alembic/       migrations
+  rules/         built-in detection rules (YAML)
   tests/         unit/ (no services) and integration/ (PostgreSQL)
 frontend/
   src/           React app: api client, components, pages

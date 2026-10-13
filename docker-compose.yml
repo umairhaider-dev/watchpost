@@ -58,7 +58,8 @@ services:
 
   migrate:
     <<: *backend
-    command: ["alembic", "upgrade", "head"]
+    # Schema migrations, then load the built-in detection rules into the database.
+    command: ["sh", "-c", "alembic upgrade head && watchpost sync-rules"]
     restart: "no"
     depends_on:
       db:
