@@ -1,0 +1,134 @@
+[project]
+name = "watchpost"
+version = "0.1.0"
+description = "SOC investigation and threat detection platform."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "alembic>=1.16",
+    "arq>=0.26",
+    "asyncpg>=0.30",
+    "fastapi>=0.115",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "python-multipart>=0.0.20",
+    "redis>=4.2",
+    "sqlalchemy[asyncio]>=2.0.40",
+    "uvicorn[standard]>=0.34",
+]
+
+[dependency-groups]
+dev = [
+    "fakeredis>=2.26",
+    "httpx>=0.28",
+    "mypy>=1.15",
+    "pre-commit>=4.0",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.26",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/watchpost"]
+
+# --------------------------------------------------------------------------
+# Ruff
+# --------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+extend-exclude = ["alembic/versions/*.py.mako"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "B",        # bugbear
+    "UP",       # pyupgrade
+    "N",        # pep8-naming
+    "S",        # bandit
+    "BLE",      # blind except
+    "T20",      # print statements
+    "SIM",      # simplify
+    "RUF",      # ruff-specific
+    "ASYNC",    # async pitfalls
+    "PTH",      # prefer pathlib
+    "DTZ",      # naive datetimes
+    "LOG",      # logging misuse
+    "G",        # logging format
+    "C4",       # comprehensions
+    "RET",      # return statements
+    "PL",       # pylint subset
+]
+ignore = [
+    "PLR0913",  # FastAPI dependencies make long signatures normal
+    "PLR0917",  # ... and they are positional by convention
+    "PLR2004",  # magic values are fine in parsers and tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests hold long literal log lines, sample IPs like 0.0.0.0 and simple file I/O.
+"tests/**" = ["S101", "S104", "S105", "S106", "PLR0915", "E501", "ASYNC240"]
+"alembic/**" = ["N999"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["watchpost"]
+known-third-party = ["alembic"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path"]
+
+# --------------------------------------------------------------------------
+# Mypy
+# --------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+files = ["src", "tests", "alembic"]
+explicit_package_bases = true
+warn_unreachable = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# --------------------------------------------------------------------------
+# Pytest / coverage
+# --------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: tests that need a running PostgreSQL instance",
+]
+filterwarnings = ["error::DeprecationWarning:watchpost.*"]
+
+[tool.coverage.run]
+source = ["watchpost"]
+branch = true
+# SQLAlchemy's asyncio layer runs code in greenlets; without this, lines that
+# execute after a database await are not recorded.
+concurrency = ["greenlet", "thread"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 85
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+]
