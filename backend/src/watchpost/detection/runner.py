@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -50,6 +50,7 @@ from watchpost.db.models import (
     RuleType,
     alert_events,
 )
+from watchpost.db.streaming import stream_rows
 from watchpost.detection.compiler import CompiledRule
 from watchpost.detection.engine import (
     MAX_EVIDENCE_PER_HIT,
@@ -65,7 +66,6 @@ from watchpost.events import FIELDS_BY_NAME
 
 logger = logging.getLogger(__name__)
 
-CHUNK_SIZE = 5_000
 MAX_EVIDENCE_PER_ALERT = MAX_EVIDENCE_PER_HIT
 _EVENTS = Event.__table__
 _OPEN_ALERT = text("status IN ('new', 'investigating')")
@@ -115,16 +115,6 @@ class _Bounds:
                 self.first = timestamp
             if self.last is None or timestamp > self.last:
                 self.last = timestamp
-
-
-async def _stream(
-    session_factory: async_sessionmaker[AsyncSession], query: Select[Any]
-) -> AsyncIterator[list[dict[str, Any]]]:
-    """Yield query results in chunks through a server-side cursor."""
-    async with session_factory() as session:
-        result = await session.stream(query.execution_options(yield_per=CHUNK_SIZE))
-        async for partition in result.partitions(CHUNK_SIZE):
-            yield [dict(row._mapping) for row in partition]
 
 
 def _source_filter(query: Select[Any], sources: frozenset[str] | None) -> Select[Any]:
@@ -221,7 +211,7 @@ async def detect(
     bounds = _Bounds()
 
     scope_query = select(_EVENTS).where(*scope.conditions())
-    async for rows in _stream(session_factory, scope_query):
+    async for rows in stream_rows(session_factory, scope_query):
         result.events_scanned += len(rows)
         bounds.update(rows)
         for rule, hit in await asyncio.to_thread(
@@ -258,7 +248,7 @@ async def _detect_windows(
             _EVENTS.c.timestamp <= last + widest,
         )
         kept: dict[str, list[EventRow]] = defaultdict(list)
-        async for rows in _stream(session_factory, query):
+        async for rows in stream_rows(session_factory, query):
             await asyncio.to_thread(_keep_relevant, group, rows, kept)
         for rule in group:
             hits = await asyncio.to_thread(_evaluate_window_rule, rule, kept[rule.id], scope)
@@ -287,7 +277,7 @@ async def _detect_new_values(
             entities = {values[0] for values in map(rule.group_values, rule_targets)}
             query = query.where(column.in_(sorted(entity for entity in entities if entity)))
         history: list[EventRow] = []
-        async for rows in _stream(session_factory, query):
+        async for rows in stream_rows(session_factory, query):
             history.extend(row for row in rows if rule.matches(row))
         hits = await asyncio.to_thread(evaluate_new_value, rule, history, rule_targets)
         result.hits.extend((rule, hit) for hit in hits)

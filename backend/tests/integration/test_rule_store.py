@@ -48,7 +48,7 @@ async def test_sync_inserts_every_builtin_rule(db_session: AsyncSession) -> None
     result = await sync_builtin_rules(db_session, RULES_DIR)
 
     rules = await all_rules(db_session)
-    assert len(result.created) == len(rules) == 20
+    assert len(result.created) == len(rules) == 21
     brute_force = rules["ssh-brute-force"]
     assert brute_force.origin is RuleOrigin.BUILTIN
     assert brute_force.rule_type is RuleType.THRESHOLD
@@ -65,7 +65,7 @@ async def test_second_sync_changes_nothing(db_session: AsyncSession) -> None:
     result = await sync_builtin_rules(db_session, RULES_DIR)
 
     assert result.created == result.updated == []
-    assert len(result.unchanged) == 20
+    assert len(result.unchanged) == 21
 
 
 async def test_changed_file_updates_rule_but_keeps_enabled_state(
@@ -139,7 +139,7 @@ async def test_load_compiled_rules_filters_and_reports_broken_rules(
 
     assert "ssh-brute-force" not in {rule.id for rule in enabled.rules}
     assert enabled.broken == ["web-sql-injection"]
-    assert len(enabled.rules) == 18
+    assert len(enabled.rules) == 19
     assert sorted(rule.id for rule in chosen.rules) == ["linux-user-created", "ssh-brute-force"]
 
 

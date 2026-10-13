@@ -100,7 +100,7 @@ def test_parse_events_json_document(context: ParseContext) -> None:
     with LogFile.open(SAMPLES / "sysmon.json") as log_file:
         events = list(parse_events(log_file.stream, WindowsEventParser(context), stats))
 
-    assert len(events) == 7
+    assert len(events) == 8
     assert stats.malformed == 0
 
 

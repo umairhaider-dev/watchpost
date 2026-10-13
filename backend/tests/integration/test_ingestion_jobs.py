@@ -61,7 +61,7 @@ async def reload(session: AsyncSession, job: IngestionJob) -> IngestionJob:
         ("auth.log", "linux_auth", 46, "linux_auth"),
         ("access.log", "web_access", 44, "web_access"),
         ("windows_security.jsonl", "windows", 22, "windows_security"),
-        ("sysmon.json", "windows", 7, "sysmon"),
+        ("sysmon.json", "windows", 8, "sysmon"),
         ("app_events.jsonl", "json", 10, "json"),
     ],
 )

@@ -24,6 +24,8 @@ from watchpost.db.models import (
 from watchpost.detection.runner import Scope, create_run, execute_run
 from watchpost.detection.store import sync_builtin_rules
 from watchpost.ingestion.jobs import run_ingestion_job
+from watchpost.intel.feeds import parse_feed
+from watchpost.intel.store import upsert_iocs
 
 ROOT = Path(__file__).resolve().parents[3]
 SAMPLES = ROOT / "samples"
@@ -122,6 +124,8 @@ async def test_samples_raise_an_alert_for_every_builtin_rule(
     session_factory: async_sessionmaker[AsyncSession],
     app_settings: Settings,
 ) -> None:
+    feed = parse_feed((SAMPLES / "iocs.csv").read_bytes(), "iocs.csv")
+    await upsert_iocs(db_session, feed.entries, source="iocs.csv")
     runs = []
     for name in SAMPLE_FILES:
         job_id = await ingest_sample(db_session, session_factory, app_settings, name)

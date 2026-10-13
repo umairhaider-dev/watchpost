@@ -59,7 +59,7 @@ async def test_list_rules_with_alert_counts(client: AsyncClient, db_session: Asy
 
     rules = {rule["id"]: rule for rule in (await client.get("/api/rules")).json()}
 
-    assert len(rules) == 20
+    assert len(rules) == 21
     brute_force = rules["ssh-brute-force"]
     assert brute_force["total_alerts"] == 2
     assert brute_force["open_alerts"] == 1

@@ -23,6 +23,7 @@ from watchpost.ingestion.errors import IngestionError
 from watchpost.ingestion.parsers import AUTO, ParseContext, Parser, detect_parser, get_parser
 from watchpost.ingestion.pipeline import ParseStats, insert_events, parse_events, take_rows
 from watchpost.ingestion.readers import LogFile, read_sample
+from watchpost.intel.matching import IndicatorIndex, link_matches
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,9 @@ async def _ingest(
     )
     logger.info("Ingesting job %d (%s) with parser %s", job.id, job.stored_path.name, parser.name)
 
+    async with session_factory() as session:
+        indicators = await IndicatorIndex.load(session)
+
     stats = ParseStats()
     inserted = duplicates = 0
     with LogFile.open(job.stored_path) as log_file:
@@ -116,10 +120,20 @@ async def _ingest(
             rows = await asyncio.to_thread(take_rows, events, settings.ingest_batch_size, job.id)
             if not rows:
                 break
+            # Flag indicator matches before insert, link them once IDs exist.
+            matches = await asyncio.to_thread(indicators.annotate, rows)
             async with session_factory() as session:
-                batch_inserted = await insert_events(session, rows)
-                inserted += batch_inserted
-                duplicates += len(rows) - batch_inserted
+                stored = await insert_events(session, rows)
+                inserted += len(stored)
+                duplicates += len(rows) - len(stored)
+                await link_matches(
+                    session,
+                    [
+                        (event_id, ioc_id, field_name)
+                        for event_id, event_hash in stored
+                        for ioc_id, field_name in matches.get(event_hash, [])
+                    ],
+                )
                 await _save_progress(
                     session,
                     job.id,

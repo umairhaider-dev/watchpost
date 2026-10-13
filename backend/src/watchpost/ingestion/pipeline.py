@@ -145,17 +145,21 @@ def take_rows(
 
 
 _INSERT_EVENTS = (
-    pg_insert(Event).on_conflict_do_nothing(index_elements=[Event.event_hash]).returning(Event.id)
+    pg_insert(Event)
+    .on_conflict_do_nothing(index_elements=[Event.event_hash])
+    .returning(Event.id, Event.event_hash)
 )
 
 
-async def insert_events(session: AsyncSession, rows: Sequence[dict[str, Any]]) -> int:
+async def insert_events(
+    session: AsyncSession, rows: Sequence[dict[str, Any]]
+) -> list[tuple[int, str]]:
     """Insert a batch, skipping events whose hash already exists.
 
     Returns:
-        The number of rows actually inserted; the rest were duplicates.
+        ``(id, event_hash)`` for the rows actually inserted; the rest were duplicates.
     """
     if not rows:
-        return 0
+        return []
     result = await session.execute(_INSERT_EVENTS, list(rows))
-    return len(result.all())
+    return [(event_id, event_hash) for event_id, event_hash in result]

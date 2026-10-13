@@ -223,5 +223,38 @@
         "ParentImage": "C:\\Windows\\explorer.exe"
       }
     }
+  },
+  {
+    "Event": {
+      "System": {
+        "Provider": {
+          "#attributes": {
+            "Name": "Microsoft-Windows-Sysmon",
+            "Guid": "5770385F-C22A-43E0-BF4C-06F5698FFBD9"
+          }
+        },
+        "EventID": 1,
+        "TimeCreated": {
+          "#attributes": {
+            "SystemTime": "2026-10-12T09:31:38.900Z"
+          }
+        },
+        "EventRecordID": 51208,
+        "Channel": "Microsoft-Windows-Sysmon/Operational",
+        "Computer": "WS-FIN-07.corp.example.local"
+      },
+      "EventData": {
+        "RuleName": "-",
+        "UtcTime": "2026-10-12 09:31:38.900",
+        "ProcessId": 5120,
+        "Image": "C:\\Users\\jsmith\\AppData\\Local\\Temp\\m.exe",
+        "CommandLine": "m.exe privilege::debug sekurlsa::logonpasswords exit",
+        "User": "CORP\\jsmith",
+        "IntegrityLevel": "High",
+        "Hashes": "SHA256=3C1F1A2B9D8E7F6A5B4C3D2E1F0A9B8C7D6E5F4A3B2C1D0E9F8A7B6C5D4E3F2A,MD5=0B5E0C3D9A8F7E6D5C4B3A2918172635",
+        "ParentProcessId": 4412,
+        "ParentImage": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      }
+    }
   }
 ]

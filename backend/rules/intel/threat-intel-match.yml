@@ -1,0 +1,22 @@
+id: threat-intel-indicator-match
+title: Activity involving a known-bad indicator
+description: |
+  An event contains an IP address, domain or file hash listed in the threat
+  intelligence store: a login from a known attacker address, a DNS lookup of
+  a command-and-control domain, or a process whose hash belongs to known
+  malware. The alert's enrichment lists which indicator matched, in which
+  field, and the feed it came from. Treat the confidence of the indicator as
+  the confidence of the alert.
+severity: high
+logsource: {}
+detection:
+  indicator_match:
+    threat.matched: true
+  condition: indicator_match
+group_by: [host.name, source.ip]
+falsepositives:
+  - Stale indicators for addresses that have since been reassigned
+  - Shared hosting, CDN or cloud addresses that also serve legitimate sites
+  - Sinkholed domains that now point at researchers
+references:
+  - https://www.cisa.gov/topics/cyber-threats-and-advisories/information-sharing

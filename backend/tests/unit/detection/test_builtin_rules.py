@@ -130,6 +130,8 @@ class Case:
     match: list[str]
     no_match: list[str]
     expected_group: dict[str, str] = field(default_factory=dict)
+    # Line numbers the indicator matcher would flag (threat.matched).
+    indicator_lines: frozenset[int] = frozenset()
 
 
 CASES: dict[str, Case] = {
@@ -396,10 +398,41 @@ CASES: dict[str, Case] = {
         ],
         expected_group={"source.ip": ATTACKER},
     ),
+    "threat-intel-indicator-match": Case(
+        "json",
+        match=[
+            json.dumps(
+                {
+                    "timestamp": "2026-10-12T09:40:00Z",
+                    "hostname": "api-01",
+                    "src_ip": ATTACKER,
+                    "event": "login",
+                }
+            ),
+            json.dumps(
+                {
+                    "timestamp": "2026-10-12T09:41:00Z",
+                    "hostname": "api-01",
+                    "src_ip": ATTACKER,
+                    "event": "login",
+                }
+            ),
+        ],
+        no_match=[
+            json.dumps({"timestamp": "2026-10-12T09:40:00Z", "hostname": "api-01", "src_ip": OTHER})
+        ],
+        expected_group={"host.name": "api-01", "source.ip": ATTACKER},
+        indicator_lines=frozenset({1, 2}),
+    ),
 }
 
+# An indicator match is not one ATT&CK technique: it depends on what the indicator was.
+UNMAPPED_RULES = frozenset({"threat-intel-indicator-match"})
 
-def run(rule_id: str, parser_name: str, lines: list[str]) -> list[Hit]:
+
+def run(
+    rule_id: str, parser_name: str, lines: list[str], indicator_lines: frozenset[int] = frozenset()
+) -> list[Hit]:
     parser = get_parser(parser_name)(ParseContext(reference_time=REFERENCE))
     rows = []
     for number, line in enumerate(lines, start=1):
@@ -409,7 +442,9 @@ def run(rule_id: str, parser_name: str, lines: list[str]) -> list[Hit]:
             assert isinstance(parser, JsonParser)
             event = parser.parse_record(json.loads(line))
         assert event is not None
-        rows.append(row_with_id(event.to_row(), number))
+        row = row_with_id(event.to_row(), number)
+        row["ioc_matched"] = number in indicator_lines
+        rows.append(row)
     return evaluate(RULES[rule_id], rows)
 
 
@@ -425,7 +460,7 @@ def test_every_rule_has_test_cases() -> None:
 def test_rule_fires_on_matching_logs(rule_id: str) -> None:
     case = CASES[rule_id]
 
-    hits = run(rule_id, case.parser, case.match)
+    hits = run(rule_id, case.parser, case.match, case.indicator_lines)
 
     assert len(hits) == 1, f"{rule_id} should fire exactly once, got {len(hits)}"
     group = dict(hits[0].group)
@@ -447,6 +482,8 @@ def test_rule_is_documented(rule_id: str) -> None:
     assert len(definition.description.split()) >= 20, "describe the attack and the evidence"
     assert definition.falsepositives, "list known false positives"
     assert definition.references, "link to ATT&CK or other references"
+    if rule_id in UNMAPPED_RULES:
+        return
     assert definition.tactics and all(tactic in TACTICS for tactic in definition.tactics)
     assert definition.techniques
     assert all(technique_name(technique) for technique in definition.techniques)
