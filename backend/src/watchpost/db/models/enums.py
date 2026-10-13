@@ -1,0 +1,136 @@
+"""Enumerations shared by models, API schemas and the detection engine."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class UserRole(StrEnum):
+    """Access level of a platform user."""
+
+    ADMIN = "admin"
+    ANALYST = "analyst"
+    VIEWER = "viewer"
+
+
+class Severity(StrEnum):
+    """Severity scale shared by rules, alerts and cases (Sigma levels)."""
+
+    INFORMATIONAL = "informational"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+    @property
+    def rank(self) -> int:
+        """Numeric ordering, higher is more severe."""
+        return _SEVERITY_RANK[self]
+
+
+_SEVERITY_RANK = {
+    Severity.INFORMATIONAL: 0,
+    Severity.LOW: 1,
+    Severity.MEDIUM: 2,
+    Severity.HIGH: 3,
+    Severity.CRITICAL: 4,
+}
+
+
+class RuleType(StrEnum):
+    """How a detection rule evaluates events."""
+
+    MATCH = "match"  # single-event Sigma-style selection
+    THRESHOLD = "threshold"  # N matching events within a window, grouped by a field
+    SEQUENCE = "sequence"  # event A followed by event B from the same entity
+
+
+class AlertStatus(StrEnum):
+    """Triage state of an alert."""
+
+    NEW = "new"
+    INVESTIGATING = "investigating"
+    TRUE_POSITIVE = "true_positive"
+    FALSE_POSITIVE = "false_positive"
+    CLOSED = "closed"
+
+    @property
+    def is_open(self) -> bool:
+        """Open alerts still absorb new hits for the same group key."""
+        return self in {AlertStatus.NEW, AlertStatus.INVESTIGATING}
+
+
+class CaseStatus(StrEnum):
+    """Lifecycle state of an investigation case."""
+
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+
+class IocType(StrEnum):
+    """Kinds of indicators of compromise kept in the local store."""
+
+    IP = "ip"
+    DOMAIN = "domain"
+    MD5 = "md5"
+    SHA1 = "sha1"
+    SHA256 = "sha256"
+
+
+class IngestOrigin(StrEnum):
+    """How a file reached the ingestion pipeline."""
+
+    UPLOAD = "upload"
+    WATCH_FOLDER = "watch_folder"
+
+
+class IngestStatus(StrEnum):
+    """Lifecycle of an ingestion job."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+    @property
+    def is_finished(self) -> bool:
+        """True once the job will not change any more."""
+        return self in {IngestStatus.COMPLETED, IngestStatus.FAILED}
+
+
+class LogSource(StrEnum):
+    """Parser that produced an event."""
+
+    LINUX_AUTH = "linux_auth"
+    WINDOWS_SECURITY = "windows_security"
+    SYSMON = "sysmon"
+    WEB_ACCESS = "web_access"
+    JSON = "json"
+
+
+class EventOutcome(StrEnum):
+    """ECS ``event.outcome`` values."""
+
+    SUCCESS = "success"
+    FAILURE = "failure"
+    UNKNOWN = "unknown"
+
+
+class EventCategory(StrEnum):
+    """Subset of ECS ``event.category`` values relevant to the supported sources."""
+
+    AUTHENTICATION = "authentication"
+    CONFIGURATION = "configuration"
+    DRIVER = "driver"
+    FILE = "file"
+    HOST = "host"
+    IAM = "iam"
+    INTRUSION_DETECTION = "intrusion_detection"
+    MALWARE = "malware"
+    NETWORK = "network"
+    PROCESS = "process"
+    REGISTRY = "registry"
+    SESSION = "session"
+    WEB = "web"
