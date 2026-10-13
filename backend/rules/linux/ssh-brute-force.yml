@@ -1,0 +1,30 @@
+id: ssh-brute-force
+title: SSH brute force
+description: |
+  Many failed SSH password logins from one source address in a short time.
+  Automated tools cycle through common usernames and passwords against any
+  SSH server exposed to the internet; a burst of failures from a single IP
+  is the classic signature. On its own this is noise worth tracking. If the
+  same address later logs in successfully, see "SSH brute force followed by
+  a successful login".
+severity: medium
+type: threshold
+mitre:
+  tactics: [TA0006]
+  techniques: [T1110.001]
+logsource:
+  source: linux_auth
+detection:
+  failed_login:
+    event.action: ssh_login
+    event.outcome: failure
+  condition: failed_login
+group_by: [source.ip]
+threshold:
+  count: 10
+  timeframe: 5m
+falsepositives:
+  - A user or script retrying over and over with an expired password
+  - Vulnerability scans run by your own security team
+references:
+  - https://attack.mitre.org/techniques/T1110/001/

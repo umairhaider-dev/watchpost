@@ -1,3 +1,4 @@
+Oct 10 02:00:01 web-01 sshd[900]: Accepted publickey for backup from 10.20.0.30 port 40022 ssh2: ED25519 SHA256:pQ7Lr2mXc9VbN4sT1kZ8wHy3aGd6EfJ0uRiO5nCqMBk
 Oct 12 08:01:12 web-01 sshd[1021]: Server listening on 0.0.0.0 port 22.
 Oct 12 08:15:03 web-01 sshd[2210]: Accepted publickey for deploy from 10.20.0.15 port 51522 ssh2: ED25519 SHA256:3m9qKfP0wTgQ7cE2bYx1nV8uR5sL4hJ6aZ0dF2gH1kM
 Oct 12 08:15:03 web-01 sshd[2210]: pam_unix(sshd:session): session opened for user deploy(uid=1001) by (uid=0)

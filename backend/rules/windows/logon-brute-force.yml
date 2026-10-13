@@ -1,0 +1,29 @@
+id: windows-logon-brute-force
+title: Windows logon brute force
+description: |
+  Many failed Windows logons (event 4625) from one network address within
+  five minutes. Typical of password guessing against SMB, RDP or WinRM from
+  a single machine. Failures without a source address (local console
+  logons) are ignored, because they cannot be tied to an attacker.
+severity: medium
+type: threshold
+mitre:
+  tactics: [TA0006]
+  techniques: [T1110]
+logsource:
+  source: windows_security
+detection:
+  failed_logon:
+    event.code: '4625'
+    source.ip|exists: true
+  condition: failed_logon
+group_by: [source.ip]
+threshold:
+  count: 10
+  timeframe: 5m
+falsepositives:
+  - A service or scheduled task running with an expired password
+  - A misconfigured application retrying a stored credential
+references:
+  - https://attack.mitre.org/techniques/T1110/
+  - https://learn.microsoft.com/windows/security/threat-protection/auditing/event-4625

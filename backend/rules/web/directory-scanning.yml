@@ -1,0 +1,27 @@
+id: web-directory-scanning
+title: Web directory and file scanning
+description: |
+  One client received twenty or more "404 Not Found" responses within two
+  minutes. Content discovery tools (gobuster, dirbuster, Nikto) request long
+  wordlists of paths such as /admin, /.env or /backup.zip, and nearly all of
+  them miss. A real visitor rarely produces more than a handful of 404s.
+severity: low
+type: threshold
+mitre:
+  tactics: [TA0043]
+  techniques: [T1595.003]
+logsource:
+  source: web_access
+detection:
+  not_found:
+    http.response.status_code: 404
+  condition: not_found
+group_by: [source.ip]
+threshold:
+  count: 20
+  timeframe: 2m
+falsepositives:
+  - A broken page with many missing assets, seen by one busy client
+  - Search engine crawlers following stale links
+references:
+  - https://attack.mitre.org/techniques/T1595/003/

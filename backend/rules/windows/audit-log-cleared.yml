@@ -1,0 +1,24 @@
+id: windows-audit-log-cleared
+title: Windows event log cleared
+description: |
+  The Security log was cleared (event 1102) or another event log was
+  cleared (System event 104). Attackers wipe logs to remove evidence of
+  what they did, so this is often one of the last steps of an intrusion.
+  Legitimate clearing is rare and should be planned; look at what happened
+  on the host just before.
+severity: high
+mitre:
+  tactics: [TA0005]
+  techniques: [T1070.001]
+logsource:
+  source: windows_security
+detection:
+  log_cleared:
+    event.code: ['1102', '104']
+  condition: log_cleared
+group_by: [host.name]
+falsepositives:
+  - An administrator clearing a full log during troubleshooting
+  - Lab or test machines that are reset regularly
+references:
+  - https://attack.mitre.org/techniques/T1070/001/

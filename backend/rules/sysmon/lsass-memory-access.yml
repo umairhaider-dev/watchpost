@@ -1,0 +1,34 @@
+id: sysmon-lsass-memory-access
+title: LSASS process memory accessed
+description: |
+  A process opened lsass.exe with an access mask that allows reading its
+  memory (Sysmon event 10). LSASS holds the credentials of logged-on users,
+  and dumping it with tools such as Mimikatz, ProcDump or comsvcs.dll is
+  the most common way to steal them on Windows. The masks below are the
+  ones these tools request. Known system processes that legitimately touch
+  LSASS are excluded.
+severity: critical
+mitre:
+  tactics: [TA0006]
+  techniques: [T1003.001]
+logsource:
+  source: sysmon
+detection:
+  lsass_access:
+    event.code: '10'
+    TargetImage|endswith: '\lsass.exe'
+    GrantedAccess: ['0x1010', '0x1410', '0x1438', '0x143a', '0x1f0fff', '0x1f1fff', '0x1f3fff', '0x1fffff']
+  system_process:
+    SourceImage|endswith:
+      - '\MsMpEng.exe'
+      - '\csrss.exe'
+      - '\wininit.exe'
+      - '\lsm.exe'
+      - '\wmiprvse.exe'
+  condition: lsass_access and not system_process
+group_by: [host.name]
+falsepositives:
+  - Endpoint security or backup products not covered by the exclusions
+  - Windows Error Reporting capturing a crash of LSASS
+references:
+  - https://attack.mitre.org/techniques/T1003/001/

@@ -58,9 +58,9 @@ async def reload(session: AsyncSession, job: IngestionJob) -> IngestionJob:
 @pytest.mark.parametrize(
     ("sample", "parser", "events", "log_source"),
     [
-        ("auth.log", "linux_auth", 45, "linux_auth"),
-        ("access.log", "web_access", 32, "web_access"),
-        ("windows_security.jsonl", "windows", 16, "windows_security"),
+        ("auth.log", "linux_auth", 46, "linux_auth"),
+        ("access.log", "web_access", 44, "web_access"),
+        ("windows_security.jsonl", "windows", 22, "windows_security"),
         ("sysmon.json", "windows", 7, "sysmon"),
         ("app_events.jsonl", "json", 10, "json"),
     ],
@@ -108,10 +108,10 @@ async def test_reingesting_the_same_file_only_counts_duplicates(
 
     second = await reload(db_session, second)
     assert second.events_inserted == 0
-    assert second.events_duplicate == 45
-    assert await count_events(db_session) == 45
+    assert second.events_duplicate == 46
+    assert await count_events(db_session) == 46
     # Duplicates keep pointing at the job that stored them first.
-    assert await count_events(db_session, ingest_job_id=first.id) == 45
+    assert await count_events(db_session, ingest_job_id=first.id) == 46
 
 
 async def test_malformed_lines_are_counted_and_reported(
@@ -164,7 +164,7 @@ async def test_default_host_is_applied(
 
     await run_ingestion_job(session_factory, app_settings, job.id)
 
-    assert await count_events(db_session, host_name="shop-web-01") == 32
+    assert await count_events(db_session, host_name="shop-web-01") == 44
 
 
 async def test_upload_is_deleted_after_processing(
@@ -191,7 +191,7 @@ async def test_watched_file_is_never_deleted(
     await run_ingestion_job(session_factory, app_settings, job.id)
 
     assert path.exists()
-    assert (await reload(db_session, job)).events_inserted == 45
+    assert (await reload(db_session, job)).events_inserted == 46
 
 
 async def test_unrecognised_format_fails_the_job(

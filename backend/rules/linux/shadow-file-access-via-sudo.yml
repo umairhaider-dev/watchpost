@@ -1,0 +1,26 @@
+id: linux-shadow-file-access
+title: Password hash file read with sudo
+description: |
+  A command run through sudo touched /etc/shadow or /etc/gshadow, which hold
+  the password hashes for local accounts. Copying them lets an attacker
+  crack passwords offline and reuse them on other systems. Administrators
+  rarely need to read these files directly.
+severity: high
+mitre:
+  tactics: [TA0006]
+  techniques: [T1003.008]
+logsource:
+  source: linux_auth
+detection:
+  sudo_command:
+    event.action: sudo_command
+    process.command_line|contains:
+      - /etc/shadow
+      - /etc/gshadow
+  condition: sudo_command
+group_by: [host.name, user.name]
+falsepositives:
+  - Administrators auditing accounts or fixing a broken shadow file
+  - Compliance scripts that check password ageing
+references:
+  - https://attack.mitre.org/techniques/T1003/008/

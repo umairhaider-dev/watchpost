@@ -1,0 +1,23 @@
+id: linux-user-created
+title: Local user account created on Linux
+description: |
+  A new local account was created with useradd. Attackers who gain root add
+  their own account so they can come back even after the original foothold
+  is closed. New accounts are rare on servers, so each one deserves a
+  quick check against change records.
+severity: low
+mitre:
+  tactics: [TA0003]
+  techniques: [T1136.001]
+logsource:
+  source: linux_auth
+detection:
+  user_created:
+    event.action: user_created
+  condition: user_created
+group_by: [host.name, user.name]
+falsepositives:
+  - Planned onboarding or provisioning by configuration management
+  - Packages that create a system user during installation
+references:
+  - https://attack.mitre.org/techniques/T1136/001/

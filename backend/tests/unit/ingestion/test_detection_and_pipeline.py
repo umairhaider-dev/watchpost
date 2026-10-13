@@ -137,7 +137,7 @@ def test_take_rows_batches(context: ParseContext) -> None:
         third = take_rows(events, 20)
         rest = take_rows(events, 20)
 
-    assert [len(batch) for batch in (first, second, third, rest)] == [20, 20, 5, 0]
+    assert [len(batch) for batch in (first, second, third, rest)] == [20, 20, 6, 0]
     assert {"event_hash", "raw_event", "timestamp"} <= set(first[0])
     assert first[0]["ingest_job_id"] is None
 

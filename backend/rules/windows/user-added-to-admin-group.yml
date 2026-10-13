@@ -1,0 +1,24 @@
+id: windows-user-added-to-admin-group
+title: Account added to a privileged Windows group
+description: |
+  An account was added to Administrators, Domain Admins, Enterprise Admins
+  or Schema Admins (events 4728, 4732, 4756). Granting itself admin rights
+  is how an attacker turns a foothold into control of the machine or the
+  domain. TargetUserName in the event data is the group; the alert's user
+  is the member that was added (often shown as a SID for local groups).
+severity: high
+mitre:
+  tactics: [TA0003, TA0004]
+  techniques: [T1098]
+logsource:
+  source: windows_security
+detection:
+  member_added:
+    event.code: ['4728', '4732', '4756']
+    TargetUserName: [Administrators, Domain Admins, Enterprise Admins, Schema Admins]
+  condition: member_added
+group_by: [host.name, user.name]
+falsepositives:
+  - Planned changes to administrator group membership
+references:
+  - https://attack.mitre.org/techniques/T1098/

@@ -18,6 +18,9 @@ dependencies = [
     "uvicorn[standard]>=0.34",
 ]
 
+[project.scripts]
+watchpost = "watchpost.cli:main"
+
 [dependency-groups]
 dev = [
     "fakeredis>=2.26",

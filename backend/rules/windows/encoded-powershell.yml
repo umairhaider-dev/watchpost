@@ -1,0 +1,29 @@
+id: windows-encoded-powershell
+title: PowerShell with an encoded command
+description: |
+  PowerShell started with -EncodedCommand (or any abbreviation such as -enc
+  or -e) followed by a base64 blob. Encoding hides the real command from
+  casual review and from naive command-line logging, which is why malware
+  loaders, phishing payloads and post-exploitation frameworks use it so
+  heavily. Decode the blob (it is UTF-16LE base64) to see what ran.
+  Matches both Security event 4688 and Sysmon event 1.
+severity: high
+mitre:
+  tactics: [TA0002, TA0005]
+  techniques: [T1059.001, T1027]
+logsource:
+  source: [windows_security, sysmon]
+detection:
+  powershell:
+    event.action: process_created
+    process.name: [powershell.exe, pwsh.exe]
+  encoded_argument:
+    process.command_line|re|i: '\s[-/](?:e|ec|en[a-z]*)\s+[A-Za-z0-9+/=]{20,}'
+  condition: powershell and encoded_argument
+group_by: [host.name, user.name]
+falsepositives:
+  - Some management agents (SCCM, Intune scripts) pass scripts this way
+  - Administrators using encoding to avoid quoting problems
+references:
+  - https://attack.mitre.org/techniques/T1059/001/
+  - https://attack.mitre.org/techniques/T1027/

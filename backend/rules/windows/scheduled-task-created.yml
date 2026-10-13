@@ -1,0 +1,24 @@
+id: windows-scheduled-task-created
+title: Scheduled task created
+description: |
+  A scheduled task was registered (Security event 4698). Tasks are a
+  favourite persistence mechanism: they survive reboots and can run as
+  SYSTEM. Attackers often give them names that look like Windows or vendor
+  updates, so check the TaskContent field for the actual command instead
+  of trusting the name.
+severity: medium
+mitre:
+  tactics: [TA0003, TA0002, TA0004]
+  techniques: [T1053.005]
+logsource:
+  source: windows_security
+detection:
+  task_created:
+    event.code: '4698'
+  condition: task_created
+group_by: [host.name, user.name]
+falsepositives:
+  - Software installers and updaters registering their own tasks
+  - Administrators or deployment tools creating maintenance tasks
+references:
+  - https://attack.mitre.org/techniques/T1053/005/

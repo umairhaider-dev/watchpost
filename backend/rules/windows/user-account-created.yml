@@ -1,0 +1,22 @@
+id: windows-user-account-created
+title: Windows user account created
+description: |
+  A user account was created (Security event 4720). Attackers create
+  accounts to keep access after their first foothold is cleaned up. The
+  account name in the alert is the new account; SubjectUserName in the
+  event data is who created it.
+severity: low
+mitre:
+  tactics: [TA0003]
+  techniques: [T1136.001]
+logsource:
+  source: windows_security
+detection:
+  account_created:
+    event.code: '4720'
+  condition: account_created
+group_by: [host.name, user.name]
+falsepositives:
+  - Normal onboarding by the helpdesk or an identity management system
+references:
+  - https://attack.mitre.org/techniques/T1136/001/

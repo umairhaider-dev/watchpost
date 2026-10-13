@@ -79,9 +79,9 @@ async def test_upload_then_process_end_to_end(
 
     assert detail["status"] == "completed"
     assert detail["detected_parser"] == "web_access"
-    assert detail["events_inserted"] == 32
+    assert detail["events_inserted"] == 44
     assert detail["malformed_samples"] == []
-    assert len(events["items"]) == 32
+    assert len(events["items"]) == 44
 
 
 async def test_upload_with_explicit_parser(client: AsyncClient) -> None:

@@ -1,0 +1,27 @@
+id: sysmon-registry-run-key
+title: Registry Run key persistence
+description: |
+  A value was written under a Run or RunOnce key (Sysmon event 13).
+  Programs listed there start automatically at logon, which makes these keys
+  one of the oldest and most common persistence locations. Check whether
+  the Details field points into a user-writable folder such as AppData or
+  Temp, which is a strong sign of malware.
+severity: medium
+mitre:
+  tactics: [TA0003, TA0004]
+  techniques: [T1547.001]
+logsource:
+  source: sysmon
+detection:
+  run_key:
+    event.code: '13'
+    TargetObject|contains:
+      - '\CurrentVersion\Run\'
+      - '\CurrentVersion\RunOnce\'
+      - '\CurrentVersion\Policies\Explorer\Run\'
+  condition: run_key
+group_by: [host.name, user.name]
+falsepositives:
+  - Software installers registering their updater or tray application
+references:
+  - https://attack.mitre.org/techniques/T1547/001/

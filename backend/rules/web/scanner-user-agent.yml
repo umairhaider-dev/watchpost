@@ -1,0 +1,37 @@
+id: web-scanner-user-agent
+title: Known attack tool user agent
+description: |
+  The request's User-Agent names a well-known scanning or exploitation tool
+  such as sqlmap, Nikto, Nmap, Nuclei or WPScan. Many attackers never
+  change the default user agent, so this is a cheap, reliable early warning
+  that someone is actively probing the site.
+severity: medium
+mitre:
+  tactics: [TA0043]
+  techniques: [T1595.002]
+logsource:
+  source: web_access
+detection:
+  scanner:
+    user_agent.original|contains:
+      - sqlmap
+      - nikto
+      - nmap
+      - masscan
+      - zgrab
+      - gobuster
+      - dirbuster
+      - wpscan
+      - nuclei
+      - acunetix
+      - nessus
+      - openvas
+      - wfuzz
+      - ffuf
+      - hydra
+  condition: scanner
+group_by: [source.ip]
+falsepositives:
+  - Vulnerability scans run by your own security team
+references:
+  - https://attack.mitre.org/techniques/T1595/002/

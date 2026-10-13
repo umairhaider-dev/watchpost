@@ -1,0 +1,40 @@
+id: web-sql-injection
+title: SQL injection attempt in a web request
+description: |
+  The requested URL, after URL-decoding, contains SQL injection payloads:
+  UNION-based extraction, tautologies such as ' OR '1'='1, time-based
+  probes (SLEEP, WAITFOR DELAY, pg_sleep) or database fingerprinting. Tools
+  like sqlmap send dozens of these. A 500 response to such a request is a
+  sign the input reached the database unescaped and deserves urgent review.
+severity: high
+mitre:
+  tactics: [TA0001]
+  techniques: [T1190]
+logsource:
+  source: web_access
+detection:
+  sql_payload:
+    details.url_decoded|contains:
+      - union select
+      - union all select
+      - "' or '1'='1"
+      - "' or 1=1"
+      - " or 1=1--"
+      - "' and '1'='1"
+      - information_schema
+      - sleep(
+      - benchmark(
+      - waitfor delay
+      - pg_sleep(
+      - xp_cmdshell
+      - extractvalue(
+      - "@@version"
+      - concat(0x
+  condition: sql_payload
+group_by: [source.ip]
+falsepositives:
+  - Search pages where users legitimately type SQL-like text
+  - Your own authorised application security testing
+references:
+  - https://attack.mitre.org/techniques/T1190/
+  - https://owasp.org/www-community/attacks/SQL_Injection

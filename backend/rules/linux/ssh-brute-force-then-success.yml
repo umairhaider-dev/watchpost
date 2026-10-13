@@ -1,0 +1,38 @@
+id: ssh-brute-force-then-success
+title: SSH brute force followed by a successful login
+description: |
+  At least five failed SSH logins from an address, then a successful login
+  from the same address within fifteen minutes. This is the moment a brute
+  force stops being noise: the attacker most likely guessed a valid password
+  and now has a shell. Treat the logged-in account as compromised until
+  proven otherwise.
+severity: high
+type: sequence
+mitre:
+  tactics: [TA0006, TA0001]
+  techniques: [T1110.001, T1078]
+logsource:
+  source: linux_auth
+group_by: [source.ip]
+sequence:
+  maxspan: 15m
+  steps:
+    - name: failures
+      count: 5
+      detection:
+        failed_login:
+          event.action: ssh_login
+          event.outcome: failure
+        condition: failed_login
+    - name: success
+      detection:
+        successful_login:
+          event.action: ssh_login
+          event.outcome: success
+        condition: successful_login
+falsepositives:
+  - A legitimate user who mistyped their password several times before
+    getting it right
+references:
+  - https://attack.mitre.org/techniques/T1110/001/
+  - https://attack.mitre.org/techniques/T1078/

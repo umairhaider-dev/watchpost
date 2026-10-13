@@ -1,0 +1,33 @@
+id: login-from-new-source-ip
+title: Login from a new source address
+description: |
+  A user logged in successfully from an IP address they have not used in
+  the previous 30 days. Stolen credentials are usually used from the
+  attacker's own infrastructure, so a familiar account suddenly arriving
+  from somewhere new is worth a look, especially right after a brute force.
+  Users without any login history in the window are skipped, which keeps the
+  first days after setup quiet. Works across SSH, Windows network and remote
+  desktop logons, and application logs that record logins.
+severity: medium
+type: new_value
+mitre:
+  tactics: [TA0001]
+  techniques: [T1078]
+logsource:
+  source: [linux_auth, windows_security, json]
+detection:
+  successful_login:
+    event.action: [ssh_login, logon, login]
+    event.outcome: success
+  machine_account:
+    user.name|endswith: $
+  condition: successful_login and not machine_account
+group_by: [user.name]
+new_value:
+  field: source.ip
+  lookback: 30d
+falsepositives:
+  - Users travelling, working from home or switching networks
+  - Address changes after an ISP or VPN reconfiguration
+references:
+  - https://attack.mitre.org/techniques/T1078/

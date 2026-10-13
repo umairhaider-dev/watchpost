@@ -1,0 +1,37 @@
+id: web-path-traversal
+title: Path traversal attempt in a web request
+description: |
+  The request tries to climb out of the web root with ../ sequences, or
+  names files that only make sense on the server itself (/etc/passwd,
+  win.ini). The decoded URL is checked, and the raw URL is checked for
+  double-encoded dots (%2e%2e, %252e) that try to slip past filters. A 200
+  response to one of these may mean the file was actually disclosed.
+severity: high
+mitre:
+  tactics: [TA0001, TA0007]
+  techniques: [T1190, T1083]
+logsource:
+  source: web_access
+detection:
+  traversal_decoded:
+    details.url_decoded|contains:
+      - ../
+      - '..\'
+      - /etc/passwd
+      - /etc/shadow
+      - /proc/self/environ
+      - win.ini
+      - boot.ini
+  traversal_encoded:
+    url.original|contains:
+      - '%2e%2e'
+      - '%252e'
+      - '..%2f'
+      - '..%5c'
+  condition: 1 of traversal_*
+group_by: [source.ip]
+falsepositives:
+  - Applications that put relative paths in query strings by design
+references:
+  - https://attack.mitre.org/techniques/T1190/
+  - https://owasp.org/www-community/attacks/Path_Traversal

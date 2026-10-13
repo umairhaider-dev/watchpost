@@ -1,0 +1,43 @@
+id: office-app-spawns-shell
+title: Office application started a shell or script host
+description: |
+  Word, Excel, PowerPoint, Outlook or another Office application started a
+  command shell, PowerShell, a script host or a LOLBin such as mshta or
+  rundll32. Office documents rarely need to do this; it is the usual first
+  step of a malicious macro from a phishing attachment. Matches Sysmon
+  event 1 and Security event 4688.
+severity: high
+mitre:
+  tactics: [TA0001, TA0002]
+  techniques: [T1566.001, T1204.002]
+logsource:
+  source: [sysmon, windows_security]
+detection:
+  office_child:
+    event.action: process_created
+    process.parent.name:
+      - winword.exe
+      - excel.exe
+      - powerpnt.exe
+      - outlook.exe
+      - msaccess.exe
+      - onenote.exe
+      - mspub.exe
+    process.name:
+      - cmd.exe
+      - powershell.exe
+      - pwsh.exe
+      - wscript.exe
+      - cscript.exe
+      - mshta.exe
+      - rundll32.exe
+      - regsvr32.exe
+      - certutil.exe
+      - bitsadmin.exe
+  condition: office_child
+group_by: [host.name, user.name]
+falsepositives:
+  - Add-ins or line-of-business macros that legitimately call scripts
+references:
+  - https://attack.mitre.org/techniques/T1566/001/
+  - https://attack.mitre.org/techniques/T1204/002/

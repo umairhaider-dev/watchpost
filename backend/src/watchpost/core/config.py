@@ -67,6 +67,12 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000", "http://localhost:5173"],
     )
 
+    # Detection
+    rules_dir: Path = Field(
+        default=Path("rules"),
+        description="Folder with the built-in rule YAML files, loaded by `watchpost sync-rules`.",
+    )
+
     # Ingestion
     upload_dir: Path = Field(
         default=Path("data/uploads"),
