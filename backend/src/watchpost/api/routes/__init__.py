@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from watchpost.api.routes import (
     alerts,
     cases,
+    dashboard,
     detection,
     entities,
     events,
@@ -20,6 +21,7 @@ from watchpost.api.routes import (
 api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(meta.router)
+api_router.include_router(dashboard.router)
 api_router.include_router(ingest.router)
 api_router.include_router(events.router)
 api_router.include_router(rules.router)
