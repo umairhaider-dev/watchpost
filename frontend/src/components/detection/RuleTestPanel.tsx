@@ -5,6 +5,9 @@ import type { RuleTestResult } from '../../api/types';
 import { formatUtc } from '../../lib/format';
 import { Card } from '../Card';
 
+/** Matches the API's limit on pasted samples. */
+const MAX_SAMPLE_CHARS = 1_000_000;
+
 function TestResults({ result }: { result: RuleTestResult }) {
   return (
     <div className="test-results" aria-live="polite">
@@ -98,6 +101,7 @@ export function RuleTestPanel({ sourceYaml }: { sourceYaml: string }) {
           className="code-input"
           rows={10}
           spellCheck={false}
+          maxLength={MAX_SAMPLE_CHARS}
           placeholder="Paste log lines here (auth.log, access log lines or JSON records)"
           value={sample}
           onChange={(event) => {

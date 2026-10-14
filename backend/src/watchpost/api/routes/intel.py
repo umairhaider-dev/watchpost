@@ -6,6 +6,7 @@ events already stored, so old activity is flagged and alerted on too.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -256,7 +257,7 @@ def _normalise(value: str, declared: IocType | None) -> tuple[IocType, str]:
 
 
 @router.get("/summary", response_model=SummaryOut)
-async def intel_summary(session: SessionDep) -> dict[str, Any]:
+async def store_summary(session: SessionDep) -> dict[str, Any]:
     """Counts for the threat intelligence page header."""
     by_type = {
         ioc_type.value: count
@@ -390,7 +391,8 @@ async def import_feed(
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "not a UTF-8 text file")
     filename = (file.filename or "feed.txt").replace("\\", "/").rsplit("/", 1)[-1][:255]
     try:
-        feed = parse_feed(data, filename)
+        # Up to 20 MiB of parsing and normalising; keep the event loop free.
+        feed = await asyncio.to_thread(parse_feed, data, filename)
     except FeedFormatError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     if not feed.entries and feed.problem_count:

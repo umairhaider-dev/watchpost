@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -196,6 +197,24 @@ async def test_test_draft_rule_against_sample(client: AsyncClient) -> None:
     )
 
     assert response.json()["hits"][0]["lines"] == [1]
+
+
+async def test_samples_up_to_the_character_limit_fit_in_the_request(
+    client: AsyncClient,
+) -> None:
+    # Under the 1,000,000 character limit, but well over 1 MiB once JSON-encoded.
+    user = "é" * 60
+    line = f"Oct 12 10:00:00 web-01 sshd[1]: Invalid user {user} from 10.0.0.5 port 22\n"
+    sample = line * (900_000 // len(line))
+    payload = {"source_yaml": CUSTOM_RULE, "sample": sample, "parser": "linux_auth"}
+    assert len(sample) < 1_000_000
+    assert len(json.dumps(payload, ensure_ascii=False).encode()) > 1024 * 1024
+
+    response = await client.post("/api/rules/test", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["events_parsed"] + body["malformed_count"] == sample.count("\n")
 
 
 @pytest.mark.parametrize(

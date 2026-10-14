@@ -19,6 +19,7 @@ from watchpost.api.middleware import RequestSizeLimitMiddleware
 from watchpost.api.routes import api_router
 from watchpost.api.routes.ingest import UPLOAD_PATH
 from watchpost.api.routes.intel import FEED_IMPORT_PATH, MAX_FEED_BYTES
+from watchpost.api.routes.rules import RULE_TEST_MAX_BODY_BYTES, RULE_TEST_PATH
 from watchpost.core.config import Settings, get_settings, log_configuration_warnings
 from watchpost.core.logging import configure_logging
 from watchpost.db.session import create_engine, create_session_factory
@@ -90,6 +91,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         path_limits=[
             (UPLOAD_PATH, settings.max_upload_bytes + MULTIPART_OVERHEAD_BYTES),
             (FEED_IMPORT_PATH, MAX_FEED_BYTES + MULTIPART_OVERHEAD_BYTES),
+            (RULE_TEST_PATH, RULE_TEST_MAX_BODY_BYTES),
         ],
     )
     app.include_router(api_router, prefix="/api")

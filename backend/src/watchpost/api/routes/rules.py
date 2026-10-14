@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Sequence
 from datetime import datetime
@@ -29,7 +30,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/rules", tags=["rules"])
 
 RuleId = Annotated[str, Path(pattern=r"^[a-z0-9][a-z0-9-]{2,63}$")]
+RULE_TEST_PATH = "/api/rules/test"
 MAX_SAMPLE_CHARS = 1_000_000
+# Request body limit for the sandbox: once JSON-encoded, a sample at the
+# character limit can take several bytes per character (UTF-8, escapes).
+RULE_TEST_MAX_BODY_BYTES = 8 * 1024 * 1024
 MAX_MATCHED_EVENTS = 200
 
 
@@ -245,7 +250,8 @@ async def run_rule_test(body: RuleTestRequest, session: SessionDep) -> RuleTestR
     else:
         compiled = compile_rule(_parse(body.source_yaml or ""))
     try:
-        result = try_rule_on_sample(compiled, body.sample, body.parser)
+        # Parsing and evaluating up to a megabyte of logs is CPU work; keep the loop free.
+        result = await asyncio.to_thread(try_rule_on_sample, compiled, body.sample, body.parser)
     except FormatDetectionError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
