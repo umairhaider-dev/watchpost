@@ -417,7 +417,7 @@ def test_account_message_from_unrelated_program_is_generic(context: ParseContext
 def test_sniff_scores_syslog_high_and_others_zero() -> None:
     syslog = Sample(lines=[f"{HEADER} sshd[1]: hello"] * 5, records=[])
     web = Sample(
-        lines=['1.2.3.4 - - [12/Oct/2026:09:10:01 +0000] "GET / HTTP/1.1" 200 1'], records=[]
+        lines=['203.0.113.7 - - [12/Oct/2026:09:10:01 +0000] "GET / HTTP/1.1" 200 1'], records=[]
     )
 
     assert LinuxAuthParser.sniff(syslog) == pytest.approx(0.9)

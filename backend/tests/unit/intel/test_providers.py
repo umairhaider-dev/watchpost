@@ -72,7 +72,7 @@ def test_internal_and_reserved_indicators_stay_local(ioc_type: IocType, value: s
 @pytest.mark.parametrize(
     ("ioc_type", "value"),
     [
-        (IocType.DOMAIN, "cdn.loader-c2-sample.net"),
+        (IocType.DOMAIN, "downloads.watchpost-sample.net"),
         (IocType.SHA256, MIMIKATZ_SHA256),
         (IocType.MD5, "9e107d9d372bb6826bd81d3542a419d6"),
     ],
