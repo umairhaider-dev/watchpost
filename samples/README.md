@@ -12,7 +12,10 @@ documentation IP ranges (`10.0.0.0/8`, `192.168.0.0/16`, `203.0.113.0/24`,
 | `sysmon.json` | `windows` | Sysmon as a pretty-printed JSON array (EVTX→JSON shape): Word spawning encoded PowerShell, DNS and C2 connection, a dropped binary reading LSASS memory, and a Run-key persistence entry. |
 | `app_events.jsonl` | `json` | Application audit log mixing flat fields, epoch timestamps and ECS-style nested objects. |
 | `malformed_lines.log` | `linux_auth` | Three broken lines among valid ones, to show how malformed lines are counted and reported. |
+| `iocs.csv` | threat intel feed | Indicators for the attacks above: the SSH brute-force source, the web scanner, the PowerShell loader's C2 domain (defanged) and the dropped tool's SHA-256, plus one address that appears in no log. Import it from the **Threat intel** page. |
 
 Upload them from the **Ingest** page, or copy them into the `watch/` folder.
 Uploading the same file twice inserts nothing new: every event is
-deduplicated by its hash. Together the files trigger every built-in detection rule.
+deduplicated by its hash. Together the files trigger every built-in detection rule;
+the indicator match rule needs `iocs.csv` to be imported first. The order does not
+matter: indicators imported after the logs are matched by a sweep over stored events.

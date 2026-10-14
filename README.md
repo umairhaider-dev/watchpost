@@ -8,8 +8,8 @@ cases.
 It is a defensive tool only: it reads and analyses logs and never scans, probes or
 modifies other systems.
 
-> **Status:** foundation, log ingestion and the detection engine are in place.
-> Threat-intel enrichment and case management are being built on top of them.
+> **Status:** foundation, log ingestion, the detection engine and threat intelligence
+> are in place. Case management is being built on top of them.
 
 ## Architecture
 
@@ -26,18 +26,21 @@ flowchart LR
         DB[(PostgreSQL<br/>events, alerts, cases)]
         MIGRATE[migrate<br/>alembic upgrade head]
     end
+    TI[AbuseIPDB / VirusTotal<br/>optional, HTTPS]
     UI --> NGINX --> API
     API --> DB
     API -- enqueue jobs --> REDIS
     REDIS --> WORKER
     WORKER --> DB
     MIGRATE --> DB
+    API -. public indicators only .-> TI
+    WORKER -. public indicators only .-> TI
 ```
 
 - **api**: FastAPI on async SQLAlchemy 2 (asyncpg). Serves the REST API under `/api`
   (OpenAPI docs at `/api/docs`).
-- **worker**: an [arq](https://arq-docs.helpmanual.io/) worker that runs ingestion and
-  detection jobs off a Redis queue.
+- **worker**: an [arq](https://arq-docs.helpmanual.io/) worker that runs ingestion,
+  detection, indicator sweep and enrichment jobs off a Redis queue.
 - **migrate**: a one-shot container that applies Alembic migrations before the api and
   worker start.
 - **frontend**: the production UI build served by nginx, which also proxies `/api` so the
@@ -263,13 +266,80 @@ lines**: the result shows which lines would fire, without storing anything.
 | SQL injection attempt in a web request | match | high | T1190 |
 | Path traversal attempt in a web request | match | high | T1190, T1083 |
 | Known attack tool user agent | match | medium | T1595.002 |
+| Threat intel indicator match | match | high | (depends on the indicator) |
 
 Together they map to 19 techniques across 8 of the 14 ATT&CK tactics (Reconnaissance,
 Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential
 Access and Discovery); lateral movement, collection, command and control, exfiltration and
 impact are not covered yet. Each rule documents the attack, the evidence it looks for and
 known false positives, and is tested against a matching and a non-matching example built
-from real log lines. All twenty fire on the logs in `samples/`.
+from real log lines. All 21 fire on the logs in `samples/` (the indicator match once
+`samples/iocs.csv` has been imported).
+
+## Threat intelligence
+
+### Indicators
+
+The **Threat intel** page keeps a local store of known-bad IP addresses, domains and file
+hashes (MD5, SHA-1, SHA-256). Add them one at a time or import a feed:
+
+- **TXT**: one indicator per line; `#` starts a comment.
+- **CSV**: a header row with a value column (`value`, `indicator`, `ioc`, ...) and,
+  optionally, `type`, `description`, `confidence` (0-100 or low/medium/high), `tags`
+  (separated by `;`), `source` and `expires`.
+
+Values are normalised before they are stored: defanged forms such as `evil[.]example` and
+`hxxp://...` are restored, URLs are reduced to their host, domains are lowercased and
+IDNA-encoded, and hashes are typed by length. CIDR ranges are rejected rather than
+silently expanded. Bad lines are reported with their line number and skipped; the rest of
+the feed is imported. Importing the same feed again updates the existing entries. Try it
+with [`samples/iocs.csv`](samples/iocs.csv).
+
+### Matching
+
+Events are checked against the active, unexpired indicators as they are ingested.
+Source and destination IPs, the host of absolute URLs, Sysmon DNS queries and network
+destinations, Sysmon `Hashes`, and ECS-style domain and hash fields in JSON records are
+all checked. A domain indicator also matches its subdomains. A match sets
+`threat.matched` on the event and records which indicator matched in which field.
+
+Adding, importing or re-enabling indicators queues a **sweep** over stored events, so
+activity from before the indicator was known is flagged too. The sweep then runs the
+*Threat intel indicator match* rule over just the period with new matches. Deleting an
+indicator clears the flag on events that no other indicator matches. Events can be
+filtered to matches on the **Events** page.
+
+### Alert enrichment
+
+When detection creates an alert or adds evidence to one, the worker enriches it. It
+collects the alert's source IP and the IPs, domains and hashes in its evidence. It
+checks each against the local store and, if configured, online providers, then stores a
+verdict (malicious, suspicious, clean or unknown) on the alert. The verdict is shown in
+the alert's threat intelligence panel, which can also be refreshed by hand.
+
+With no API keys this all works offline from the local store. Online lookups are
+optional:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `WATCHPOST_ABUSEIPDB_API_KEY` | unset | Enables AbuseIPDB lookups for IP addresses. |
+| `WATCHPOST_VIRUSTOTAL_API_KEY` | unset | Enables VirusTotal lookups for IPs, domains and hashes. |
+| `WATCHPOST_ENRICHMENT_CACHE_HOURS` | 24 | How long a provider's answer is reused. |
+| `WATCHPOST_ABUSEIPDB_DAILY_LIMIT` | 1000 | Requests per day (free tier). |
+| `WATCHPOST_VIRUSTOTAL_PER_MINUTE` / `_DAILY_LIMIT` | 4 / 500 | Requests per minute and per day (free tier). |
+
+Online lookups are limited in three ways:
+
+- **What is sent:** only public indicators. Private, loopback, link-local, documentation
+  and other reserved addresses, single-label host names, and names under reserved or
+  internal suffixes (`.local`, `.internal`, `.corp`, `example.com`, ...) are checked
+  locally and never leave the network.
+- **How often:** answers are cached in PostgreSQL, so an address seen in a hundred
+  alerts costs one request per cache period. Failed lookups are cached for 15 minutes.
+- **Rate limits:** the request budgets live in Redis, so the API and every worker share
+  one budget. A `429` pauses that provider for its `Retry-After`. Lookups held back by a
+  limit leave the alert marked as pending, and a worker job retries those every ten
+  minutes.
 
 The "new address" rule uses IP addresses; country-level detection needs a GeoIP
 database, which is not bundled so the platform can run fully offline.
@@ -280,11 +350,13 @@ database, which is not bundled so the platform can run fully offline.
 | --- | --- |
 | `events` | Normalised log events. Unique `event_hash` (SHA-256 of source + raw line) deduplicates re-ingested data. Indexed by time and by entity (IP, user, host). |
 | `rules` | Detection rules: Sigma-style YAML source plus parsed definition, severity, ATT&CK tactics/techniques, enabled flag, and whether it is built-in or custom. |
-| `detection_runs` | One row per pass of the rules over an ingestion job's events or a time range, with what it scanned and the alerts it created or updated. |
+| `detection_runs` | One row per pass of the rules over an ingestion job's events, a time range, or the period with new threat-intel matches, with what it scanned and the alerts it created or updated. |
 | `alerts` | Rule hits. A partial unique index on `group_key` for open alerts makes repeated hits update one alert instead of creating hundreds. |
 | `alert_events` | Links alerts to the evidence events behind them. |
 | `cases` / `case_notes` | Investigations that group alerts, with assignee, status, timestamps and analyst notes. |
-| `iocs` | Local threat-intel store of IPs, domains and file hashes. |
+| `iocs` | Local threat-intel store of IPs, domains and file hashes, with source, confidence, tags and optional expiry. |
+| `event_ioc_matches` | Which indicator matched which event, and in which field. `events.ioc_matched` is the indexed flag for filtering. |
+| `enrichment_cache` | Answers from online providers per indicator, reused until they expire. |
 | `users` | Analysts, admins and viewers. |
 | `audit_log` | Append-only record of analyst actions. |
 | `ingestion_jobs` | One row per uploaded or watched file: status, progress, inserted/duplicate/malformed counts and the first malformed records. |
@@ -350,6 +422,7 @@ backend/
     events/      normalised event schema, field registry, dedup hashing
     ingestion/   readers, parsers, batch pipeline, job runner, folder watcher
     detection/   rule schema, matchers, conditions, engine, runner, rule sync
+    intel/       indicator parsing, feeds, matching, sweeps, providers, enrichment
     api/         FastAPI app factory, middleware, dependencies, routes
     worker/      arq settings, queue and jobs
   alembic/       migrations
