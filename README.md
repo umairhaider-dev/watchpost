@@ -24,7 +24,7 @@ flowchart LR
         WORKER[worker<br/>arq]
         REDIS[(redis<br/>job queue)]
         DB[(PostgreSQL<br/>events, alerts, cases)]
-        MIGRATE[migrate<br/>alembic upgrade head]
+        MIGRATE[migrate<br/>schema + built-in rules]
     end
     TI[AbuseIPDB / VirusTotal<br/>optional, HTTPS]
     UI --> NGINX --> API
@@ -40,9 +40,11 @@ flowchart LR
 - **api**: FastAPI on async SQLAlchemy 2 (asyncpg). Serves the REST API under `/api`
   (OpenAPI docs at `/api/docs`).
 - **worker**: an [arq](https://arq-docs.helpmanual.io/) worker that runs ingestion,
-  detection, indicator sweep and enrichment jobs off a Redis queue.
-- **migrate**: a one-shot container that applies Alembic migrations before the api and
-  worker start.
+  detection, indicator sweep and enrichment jobs off a Redis queue. Every five minutes it
+  also re-queues any job still marked as queued, so work recorded during a Redis outage is
+  not lost.
+- **migrate**: a one-shot container that applies Alembic migrations and loads the
+  built-in detection rules before the api and worker start.
 - **frontend**: the production UI build served by nginx, which also proxies `/api` so the
   browser only ever talks to one origin.
 
@@ -121,11 +123,14 @@ story in each; see [samples/README.md](samples/README.md).
    memory use does not grow with file size.
 2. Each record is parsed into a normalised event. Records that cannot be parsed are
    counted, and the first 100 are kept with their line number and the reason.
-3. Events are inserted in batches with `ON CONFLICT (event_hash) DO NOTHING`. The hash
+3. Each batch is checked against the threat intel indicators (see
+   [Threat intelligence](#threat-intelligence)), and matching events are flagged.
+4. Events are inserted in batches with `ON CONFLICT (event_hash) DO NOTHING`. The hash
    covers the log source and the raw line (for JSON, the record with its keys sorted), so
    ingesting the same data twice stores it once and reports exact duplicate counts.
-4. Progress counters are committed with every batch, so the **Ingest** page shows live
+5. Progress counters are committed with every batch, so the **Ingest** page shows live
    progress and the totals always match the database.
+6. Once the file is done, a detection run over its new events is queued.
 
 ### Exporting Windows events
 
@@ -437,4 +442,4 @@ docker-compose.yml
 
 ## License
 
-MIT
+[MIT](LICENSE)
