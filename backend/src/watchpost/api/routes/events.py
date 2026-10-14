@@ -1,5 +1,7 @@
-"""Browsing stored events, newest first.
+"""Searching stored events, newest first.
 
+Events are filtered with the query language in :mod:`watchpost.search`
+(``user.name:root AND event.outcome:failure``) and a time range.
 Pagination is keyset-based on ``(timestamp, id)``, which the
 ``ix_events_timestamp_id`` index serves directly, so page 1000 is as fast
 as page 1. The cursor is opaque to clients.
@@ -18,6 +20,7 @@ from sqlalchemy import select, tuple_
 
 from watchpost.api.deps import SessionDep
 from watchpost.db.models import Event, Ioc, IocType, LogSource, event_ioc_matches
+from watchpost.search import QueryError, compile_query
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -91,14 +94,34 @@ def decode_cursor(cursor: str) -> tuple[datetime, int]:
 async def list_events(
     session: SessionDep,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    q: Annotated[
+        str | None,
+        Query(
+            max_length=2000,
+            description="Search query, e.g. user.name:root AND NOT source.ip:10.0.0.0/8",
+        ),
+    ] = None,
+    start: Annotated[datetime | None, Query(description="Events at or after")] = None,
+    end: Annotated[datetime | None, Query(description="Events before")] = None,
     log_source: LogSource | None = None,
     ioc_matched: Annotated[
         bool | None, Query(description="Only events that matched a threat indicator")
     ] = None,
     cursor: Annotated[str | None, Query(max_length=200)] = None,
 ) -> dict[str, Any]:
-    """Newest events first, optionally filtered by log source or indicator matches."""
+    """Events matching the query and time range, newest first."""
     query = select(Event).order_by(Event.timestamp.desc(), Event.id.desc()).limit(limit + 1)
+    if q:
+        try:
+            condition = compile_query(q)
+        except QueryError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+        if condition is not None:
+            query = query.where(condition)
+    if start is not None:
+        query = query.where(Event.timestamp >= start)
+    if end is not None:
+        query = query.where(Event.timestamp < end)
     if log_source is not None:
         query = query.where(Event.log_source == log_source.value)
     if ioc_matched is not None:
