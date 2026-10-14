@@ -1,11 +1,20 @@
-"""Investigation cases and their notes."""
+"""Investigation cases, their notes and the events pinned to them as evidence."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Identity, Index, String, Text
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    Identity,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from watchpost.db.base import Base, TimestampMixin, str_enum
@@ -13,6 +22,7 @@ from watchpost.db.models.enums import CaseStatus, Severity
 
 if TYPE_CHECKING:
     from watchpost.db.models.alert import Alert
+    from watchpost.db.models.event import Event
     from watchpost.db.models.user import User
 
 
@@ -46,6 +56,13 @@ class Case(TimestampMixin, Base):
         order_by="CaseNote.created_at",
         lazy="raise",
     )
+    evidence: Mapped[list[CaseEvidence]] = relationship(
+        back_populates="case",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="CaseEvidence.created_at",
+        lazy="raise",
+    )
 
     __table_args__ = (
         Index("ix_cases_status", "status"),
@@ -74,3 +91,27 @@ class CaseNote(TimestampMixin, Base):
 
     def __repr__(self) -> str:
         return f"<CaseNote id={self.id} case_id={self.case_id}>"
+
+
+class CaseEvidence(TimestampMixin, Base):
+    """An event pinned to a case, with the analyst's note on why it matters."""
+
+    __tablename__ = "case_evidence"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    case_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("cases.id", ondelete="CASCADE"))
+    event_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("events.id", ondelete="CASCADE"))
+    note: Mapped[str | None] = mapped_column(Text)
+    added_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+
+    case: Mapped[Case] = relationship(back_populates="evidence", lazy="raise")
+    event: Mapped[Event] = relationship(lazy="raise")
+    added_by: Mapped[User | None] = relationship(lazy="raise")
+
+    __table_args__ = (
+        UniqueConstraint("case_id", "event_id"),
+        Index("ix_case_evidence_event_id", "event_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<CaseEvidence case_id={self.case_id} event_id={self.event_id}>"

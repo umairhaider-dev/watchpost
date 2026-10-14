@@ -10,13 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from tests.conftest import run_alembic
 from watchpost.db.base import Base
 
-HEAD_REVISION = "0005"
+HEAD_REVISION = "0006"
 
 EXPECTED_TABLES = {
     "alembic_version",
     "alert_events",
     "alerts",
     "audit_log",
+    "case_evidence",
     "case_notes",
     "cases",
     "detection_runs",
@@ -70,6 +71,7 @@ async def test_event_indexes_exist(engine: AsyncEngine) -> None:
     assert {
         "ix_events_timestamp_id",
         "ix_events_source_ip_timestamp",
+        "ix_events_destination_ip_timestamp",
         "ix_events_user_name_timestamp",
         "ix_events_host_name_timestamp",
         "ix_events_log_source_timestamp",

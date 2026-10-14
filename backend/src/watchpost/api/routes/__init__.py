@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from watchpost.api.routes import (
     alerts,
+    cases,
     detection,
     events,
     health,
@@ -22,6 +23,7 @@ api_router.include_router(events.router)
 api_router.include_router(rules.router)
 api_router.include_router(detection.router)
 api_router.include_router(alerts.router)
+api_router.include_router(cases.router)
 api_router.include_router(intel.router)
 api_router.include_router(users.router)
 

@@ -2,7 +2,7 @@
 
 from watchpost.db.models.alert import OPEN_ALERT_STATUSES, Alert, alert_events
 from watchpost.db.models.audit import AuditLog
-from watchpost.db.models.case import Case, CaseNote
+from watchpost.db.models.case import Case, CaseEvidence, CaseNote
 from watchpost.db.models.detection import DetectionRun
 from watchpost.db.models.enums import (
     AlertStatus,
@@ -34,6 +34,7 @@ __all__ = [
     "AlertStatus",
     "AuditLog",
     "Case",
+    "CaseEvidence",
     "CaseNote",
     "CaseStatus",
     "DetectionRun",

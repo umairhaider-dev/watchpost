@@ -5,7 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from watchpost.db.models import Alert, AlertStatus, LogSource, Severity
+from sqlalchemy import insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from watchpost.db.models import Alert, AlertStatus, Event, LogSource, Severity
 from watchpost.events import NormalizedEvent, compute_event_hash
 
 DEFAULT_TIME = datetime(2026, 3, 14, 9, 26, 53, tzinfo=UTC)
@@ -57,3 +60,12 @@ def make_alert(**overrides: Any) -> Alert:
     }
     data.update(overrides)
     return Alert(**data)
+
+
+async def store_events(session: AsyncSession, *events: NormalizedEvent) -> list[int]:
+    """Insert events and return their IDs, in order."""
+    ids = await session.scalars(
+        insert(Event).returning(Event.id, sort_by_parameter_order=True),
+        [event.to_row() for event in events],
+    )
+    return list(ids)

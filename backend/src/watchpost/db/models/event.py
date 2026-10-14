@@ -83,6 +83,7 @@ class Event(Base):
         Index("ix_events_timestamp_id", "timestamp", "id"),
         Index("ix_events_log_source_timestamp", "log_source", "timestamp"),
         Index("ix_events_source_ip_timestamp", "source_ip", "timestamp"),
+        Index("ix_events_destination_ip_timestamp", "destination_ip", "timestamp"),
         Index("ix_events_user_name_timestamp", "user_name", "timestamp"),
         Index("ix_events_host_name_timestamp", "host_name", "timestamp"),
         Index("ix_events_category_action", "event_category", "event_action"),
