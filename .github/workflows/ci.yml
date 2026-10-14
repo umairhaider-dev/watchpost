@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
       - name: Run file-level pre-commit hooks
         # mypy, eslint, prettier and tsc run in the dedicated jobs below.
         env:
@@ -49,7 +49,7 @@ jobs:
       WATCHPOST_TEST_DATABASE_URL: postgresql+asyncpg://watchpost:watchpost@localhost:5432/watchpost_test
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
