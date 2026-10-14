@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.datastructures import State
 
 from watchpost.core.config import Settings
+from watchpost.intel.enrichment import Enricher
 from watchpost.worker.queue import JobQueue
 
 
@@ -28,6 +29,7 @@ class AppResources:
     session_factory: async_sessionmaker[AsyncSession]
     redis: RedisPinger
     queue: JobQueue
+    enricher: Enricher
 
 
 def get_settings(request: Request) -> Settings:
@@ -71,7 +73,13 @@ def get_queue(resources: Annotated[AppResources, Depends(get_resources)]) -> Job
     return resources.queue
 
 
+def get_enricher(resources: Annotated[AppResources, Depends(get_resources)]) -> Enricher:
+    """Indicator lookups shared by the app."""
+    return resources.enricher
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 RedisDep = Annotated[RedisPinger, Depends(get_redis)]
 QueueDep = Annotated[JobQueue, Depends(get_queue)]
+EnricherDep = Annotated[Enricher, Depends(get_enricher)]

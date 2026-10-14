@@ -65,7 +65,7 @@ def test_rejects_non_indicators(raw: str, message: str) -> None:
 
 def test_declared_type_must_match() -> None:
     assert normalize_indicator("evil.example", IocType.DOMAIN) == (IocType.DOMAIN, "evil.example")
-    with pytest.raises(IndicatorError, match="looks like a ip, not a domain"):
+    with pytest.raises(IndicatorError, match="looks like an IP address, not a domain"):
         normalize_indicator("203.0.113.45", IocType.DOMAIN)
     with pytest.raises(IndicatorError, match="expected a file hash"):
         normalize_indicator("evil.example", any_hash=True)

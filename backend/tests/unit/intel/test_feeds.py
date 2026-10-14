@@ -80,7 +80,7 @@ def test_csv_with_a_typed_column() -> None:
 @pytest.mark.parametrize(
     ("row", "reason"),
     [
-        ("203.0.113.45,domain,,", "looks like a ip, not a domain"),
+        ("203.0.113.45,domain,,", "looks like an IP address, not a domain"),
         ("203.0.113.45,email,,", "unknown indicator type"),
         ("203.0.113.45,ip,very sure,", "not a number from 0 to 100"),
         ("203.0.113.45,ip,150,", "not a number from 0 to 100"),

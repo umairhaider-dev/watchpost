@@ -27,6 +27,13 @@ HASH_TYPES = frozenset({IocType.MD5, IocType.SHA1, IocType.SHA256})
 _HASH_BY_LENGTH = {32: IocType.MD5, 40: IocType.SHA1, 64: IocType.SHA256}
 _HEX = re.compile(r"^[0-9a-f]+$")
 _MIN_HASH_ATTEMPT = 24
+TYPE_NAMES = {
+    IocType.IP: "an IP address",
+    IocType.DOMAIN: "a domain",
+    IocType.MD5: "an MD5 hash",
+    IocType.SHA1: "a SHA-1 hash",
+    IocType.SHA256: "a SHA-256 hash",
+}
 _LABEL = r"(?!-)[a-z0-9-]{1,63}(?<!-)"
 _DOMAIN = re.compile(rf"^(?=.{{1,253}}$){_LABEL}(?:\.{_LABEL})*\.(?!-)[a-z0-9-]{{2,63}}$")
 _DEFANG = (
@@ -106,10 +113,10 @@ def normalize_indicator(
 
     detected, value = _classify(text)
     if any_hash and detected not in HASH_TYPES:
-        msg = f"expected a file hash, got a {detected.value}"
+        msg = f"expected a file hash, got {TYPE_NAMES[detected]}"
         raise IndicatorError(msg)
     if declared is not None and declared is not detected:
-        msg = f"value looks like a {detected.value}, not a {declared.value}"
+        msg = f"value looks like {TYPE_NAMES[detected]}, not {TYPE_NAMES[declared]}"
         raise IndicatorError(msg)
     return detected, value
 

@@ -12,11 +12,13 @@ from httpx import ASGITransport, AsyncClient
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from tests.fake_services import FakeServices, make_enricher
 from tests.integration.helpers import RULES_DIR
 from watchpost.api.app import create_app
 from watchpost.api.deps import AppResources, get_session
 from watchpost.core.config import Settings
 from watchpost.detection.store import sync_builtin_rules
+from watchpost.intel.enrichment import Enricher
 
 
 class RecordingQueue:
@@ -100,6 +102,23 @@ async def fake_redis() -> AsyncIterator[FakeAsyncRedis]:
 
 
 @pytest.fixture
+def services() -> FakeServices:
+    """Offline AbuseIPDB and VirusTotal stand-ins that record every request."""
+    return FakeServices()
+
+
+@pytest.fixture
+async def enricher(
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_redis: FakeAsyncRedis,
+    services: FakeServices,
+) -> AsyncIterator[Enricher]:
+    """An enricher with no providers configured (the default, offline setup)."""
+    async with services.client() as client:
+        yield make_enricher(session_factory, fake_redis, client, providers=[])
+
+
+@pytest.fixture
 def app(
     app_settings: Settings,
     engine: AsyncEngine,
@@ -107,6 +126,7 @@ def app(
     fake_redis: FakeAsyncRedis,
     queue: RecordingQueue,
     session_factory: async_sessionmaker[AsyncSession],
+    enricher: Enricher,
 ) -> FastAPI:
     """The real application wired to the test database, an in-memory Redis and a fake queue.
 
@@ -119,6 +139,7 @@ def app(
         session_factory=session_factory,
         redis=fake_redis,
         queue=queue,
+        enricher=enricher,
     )
 
     async def _session_override() -> AsyncIterator[AsyncSession]:

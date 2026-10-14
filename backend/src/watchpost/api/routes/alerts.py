@@ -1,4 +1,7 @@
-"""Reading alerts. Triage (status changes, assignment, cases) arrives with case management."""
+"""Reading and enriching alerts.
+
+Triage (status changes, assignment, cases) arrives with case management.
+"""
 
 from __future__ import annotations
 
@@ -9,9 +12,10 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import ColumnElement, func, select
 
-from watchpost.api.deps import SessionDep
+from watchpost.api.deps import EnricherDep, SessionDep
 from watchpost.api.routes.events import EventOut
 from watchpost.db.models import Alert, AlertStatus, Event, Rule, Severity, alert_events
+from watchpost.intel.alerts import enrich_alert
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -114,3 +118,16 @@ async def get_alert(alert_id: int, session: SessionDep) -> dict[str, Any]:
         ),
         "evidence": list(evidence),
     }
+
+
+@router.post("/{alert_id}/enrich", response_model=dict[str, Any])
+async def enrich(
+    alert_id: int,
+    enricher: EnricherDep,
+    refresh: Annotated[bool, Query(description="Ask providers even if cached")] = False,
+) -> dict[str, Any]:
+    """Rebuild an alert's indicator context now and return it."""
+    enrichment = await enrich_alert(enricher, alert_id, refresh=refresh)
+    if enrichment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "alert not found")
+    return enrichment

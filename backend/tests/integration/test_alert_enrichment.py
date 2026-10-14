@@ -34,11 +34,6 @@ VT_FILES = "https://www.virustotal.com/api/v3/files"
 
 
 @pytest.fixture
-def services() -> FakeServices:
-    return FakeServices()
-
-
-@pytest.fixture
 async def offline(
     session_factory: async_sessionmaker[AsyncSession], fake_redis: FakeAsyncRedis
 ) -> AsyncIterator[Enricher]:

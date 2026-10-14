@@ -8,16 +8,17 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Result, func, literal_column
+from sqlalchemy import Result, delete, exists, func, literal_column, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from watchpost.db.models import Ioc
-from watchpost.intel.feeds import FeedEntry
+from watchpost.db.models import Event, Ioc, event_ioc_matches
+from watchpost.intel.feeds import MAX_TAG_LENGTH, FeedEntry
 
 logger = logging.getLogger(__name__)
 
 _BATCH = 1000
+_FLAG_BATCH = 5000
 
 
 @dataclass(slots=True)
@@ -43,7 +44,7 @@ async def upsert_iocs(
     the old description or confidence when the feed has none).
     """
     result = ImportResult()
-    tags_extra = sorted({tag.strip().lower() for tag in extra_tags if tag.strip()})
+    tags_extra = sorted({tag.strip().lower()[:MAX_TAG_LENGTH] for tag in extra_tags if tag.strip()})
     for start in range(0, len(entries), _BATCH):
         rows: list[dict[str, Any]] = [
             {
@@ -91,3 +92,31 @@ async def upsert_iocs(
         result.updated,
     )
     return result
+
+
+async def delete_ioc(session: AsyncSession, ioc_id: int) -> bool:
+    """Remove an indicator and its matches. Flushes, does not commit.
+
+    Events matched only by this indicator lose their ``threat.matched`` flag;
+    events still matched by another indicator keep it.
+    """
+    event_ids = list(
+        await session.scalars(
+            select(event_ioc_matches.c.event_id)
+            .where(event_ioc_matches.c.ioc_id == ioc_id)
+            .distinct()
+        )
+    )
+    deleted = await session.execute(delete(Ioc).where(Ioc.id == ioc_id).returning(Ioc.id))
+    if deleted.first() is None:
+        return False
+    still_linked = exists().where(event_ioc_matches.c.event_id == Event.id)
+    for start in range(0, len(event_ids), _FLAG_BATCH):
+        await session.execute(
+            update(Event)
+            .where(Event.id.in_(event_ids[start : start + _FLAG_BATCH]), ~still_linked)
+            .values(ioc_matched=False)
+        )
+    await session.flush()
+    logger.info("Deleted indicator %d (%d matched events re-checked)", ioc_id, len(event_ids))
+    return True

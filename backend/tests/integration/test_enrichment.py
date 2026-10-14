@@ -25,11 +25,6 @@ OTHER_SHA256 = "a" * 64
 
 
 @pytest.fixture
-def services() -> FakeServices:
-    return FakeServices()
-
-
-@pytest.fixture
 async def enricher(
     session_factory: async_sessionmaker[AsyncSession],
     fake_redis: FakeAsyncRedis,

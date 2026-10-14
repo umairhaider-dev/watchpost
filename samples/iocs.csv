@@ -3,4 +3,4 @@ value,type,description,confidence,tags
 198.51.100.23,ip,Web vulnerability scanner (Nikto and sqlmap),70,scanner;web
 update-check[.]example[.]net,domain,PowerShell loader command-and-control domain,95,c2;powershell
 3c1f1a2b9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a,sha256,Credential dumping tool (Mimikatz build),95,credential-access;malware
-192.0.2.200,ip,Old scanner address (not seen in the samples),40,scanner
+198.51.100.200,ip,Old scanner address (not seen in the samples),40,scanner

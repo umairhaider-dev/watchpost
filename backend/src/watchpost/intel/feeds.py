@@ -25,6 +25,7 @@ from watchpost.intel.indicators import IndicatorError, normalize_indicator, pars
 
 MAX_FEED_ENTRIES = 200_000
 MAX_PROBLEMS_KEPT = 100
+MAX_TAG_LENGTH = 64
 _COMMENT_PREFIXES = ("#", ";", "//")
 _VALUE_COLUMNS = ("value", "indicator", "ioc", "observable")
 _TYPED_COLUMNS: dict[str, tuple[IocType | None, bool]] = {
@@ -204,7 +205,7 @@ def _csv_entry(
     tags = tuple(
         sorted(
             {
-                tag.strip().lower()
+                tag.strip().lower()[:MAX_TAG_LENGTH]
                 for tag in (cell("tags") or "").replace("|", ";").split(";")
                 if tag.strip()
             }

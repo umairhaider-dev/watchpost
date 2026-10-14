@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select, tuple_
 
 from watchpost.api.deps import SessionDep
-from watchpost.db.models import Event, LogSource
+from watchpost.db.models import Event, Ioc, IocType, LogSource, event_ioc_matches
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -59,6 +59,20 @@ class EventPage(BaseModel):
     next_cursor: str | None
 
 
+class EventIndicatorOut(BaseModel):
+    """A stored indicator that matched an event, and the field it matched in."""
+
+    ioc_id: int
+    ioc_type: IocType
+    value: str
+    field: str
+    source: str
+    description: str | None
+    confidence: int | None
+    tags: list[str]
+    is_active: bool
+
+
 def encode_cursor(event: Event) -> str:
     raw = f"{event.timestamp.isoformat()}|{event.id}"
     return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
@@ -78,15 +92,47 @@ async def list_events(
     session: SessionDep,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     log_source: LogSource | None = None,
+    ioc_matched: Annotated[
+        bool | None, Query(description="Only events that matched a threat indicator")
+    ] = None,
     cursor: Annotated[str | None, Query(max_length=200)] = None,
 ) -> dict[str, Any]:
-    """Newest events first, optionally filtered by log source."""
+    """Newest events first, optionally filtered by log source or indicator matches."""
     query = select(Event).order_by(Event.timestamp.desc(), Event.id.desc()).limit(limit + 1)
     if log_source is not None:
         query = query.where(Event.log_source == log_source.value)
+    if ioc_matched is not None:
+        query = query.where(Event.ioc_matched.is_(ioc_matched))
     if cursor:
         timestamp, event_id = decode_cursor(cursor)
         query = query.where(tuple_(Event.timestamp, Event.id) < tuple_(timestamp, event_id))
     events = list(await session.scalars(query))
     next_cursor = encode_cursor(events[limit - 1]) if len(events) > limit else None
     return {"items": events[:limit], "next_cursor": next_cursor}
+
+
+@router.get("/{event_id}/indicators", response_model=list[EventIndicatorOut])
+async def event_indicators(event_id: int, session: SessionDep) -> list[dict[str, Any]]:
+    """The threat indicators an event matched."""
+    if await session.get(Event, event_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "event not found")
+    rows = await session.execute(
+        select(Ioc, event_ioc_matches.c.field)
+        .join(event_ioc_matches, event_ioc_matches.c.ioc_id == Ioc.id)
+        .where(event_ioc_matches.c.event_id == event_id)
+        .order_by(Ioc.id, event_ioc_matches.c.field)
+    )
+    return [
+        {
+            "ioc_id": ioc.id,
+            "ioc_type": ioc.ioc_type,
+            "value": ioc.value,
+            "field": field,
+            "source": ioc.source,
+            "description": ioc.description,
+            "confidence": ioc.confidence,
+            "tags": ioc.tags,
+            "is_active": ioc.is_active,
+        }
+        for ioc, field in rows
+    ]

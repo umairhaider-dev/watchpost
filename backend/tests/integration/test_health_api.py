@@ -122,3 +122,4 @@ async def test_lifespan_creates_and_releases_resources(app: FastAPI) -> None:
         resources = resources_from_state(app.state)
         assert resources.engine.url.database == make_url(TEST_DATABASE_URL).database
         assert isinstance(resources.redis, ArqRedis)
+        assert not resources.enricher.online  # no provider keys in the test settings
