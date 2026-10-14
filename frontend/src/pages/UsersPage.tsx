@@ -86,7 +86,7 @@ function UserRow({ user, isSelf }: { user: UserAccount; isSelf: boolean }) {
         <td>
           <span className="mono">{user.username}</span>
           {isSelf ? <span className="muted small"> (you)</span> : null}
-          <span className="muted small origin">
+          <span className="muted small subline">
             {[user.full_name, user.email].filter(Boolean).join(' · ') || '—'}
           </span>
         </td>
@@ -321,7 +321,7 @@ export function UsersPage() {
         title="Users"
         description="Accounts and roles. Changes apply at once: deactivating a user or resetting their password ends their sessions. Every change is written to the audit log."
       />
-      <div className="grid grid--wide">
+      <div className="stack stack--flush">
         <Card
           title="Accounts"
           aside={users.data ? <span className="muted">{formatNumber(items.length)}</span> : null}
@@ -351,7 +351,7 @@ export function UsersPage() {
             </div>
           ) : null}
         </Card>
-        <div className="stack stack--flush">
+        <div className="grid">
           <NewUserForm />
           <RoleGuide />
         </div>

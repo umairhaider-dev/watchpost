@@ -163,9 +163,16 @@ function detailValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** ``details`` of an audit entry as "key: value" pairs, e.g. "role: analyst → admin". */
+/**
+ * ``details`` of an audit entry as "key: value" pairs, e.g. "role: analyst → admin".
+ * A change recorded at the top level (status changes) comes first as "from → to".
+ */
 export function formatAuditDetails(details: Record<string, unknown>): string {
-  return Object.entries(details)
-    .map(([key, value]) => `${key.replaceAll('_', ' ')}: ${detailValue(value)}`)
-    .join(' · ');
+  const { from, to, ...rest } = details;
+  const parts = Object.entries(rest).map(
+    ([key, value]) => `${key.replaceAll('_', ' ')}: ${detailValue(value)}`,
+  );
+  if (isChange(details)) parts.unshift(detailValue({ from, to }));
+  else if (to !== undefined) parts.unshift(`to: ${detailValue(to)}`);
+  return parts.join(' · ');
 }

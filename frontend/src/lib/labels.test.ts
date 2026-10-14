@@ -66,6 +66,10 @@ describe('audit labels', () => {
       'role: analyst → admin · full name: none → Analyst One · filename: auth_2026.log · ' +
         'fields: description, tags · everywhere: false',
     );
+    expect(formatAuditDetails({ from: 'new', to: 'false_positive' })).toBe('new → false_positive');
+    expect(formatAuditDetails({ to: 3, assignee: 'analyst.one' })).toBe(
+      'to: 3 · assignee: analyst.one',
+    );
     expect(formatAuditDetails({})).toBe('');
   });
 

@@ -59,7 +59,6 @@ export function LoginPage() {
               autoCapitalize="none"
               spellCheck={false}
               maxLength={64}
-              required
               value={username}
               onChange={(event) => {
                 setUsername(event.target.value);
@@ -73,7 +72,6 @@ export function LoginPage() {
               type="password"
               autoComplete="current-password"
               maxLength={MAX_PASSWORD_LENGTH}
-              required
               value={password}
               onChange={(event) => {
                 setPassword(event.target.value);

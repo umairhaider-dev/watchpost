@@ -77,11 +77,11 @@ export function Layout() {
         <footer className="sidebar__footer">
           <SessionPanel />
           {health.data ? (
-            <span>
+            <span className="sidebar__version">
               v{health.data.version} · {health.data.environment}
             </span>
           ) : (
-            <span>API unreachable</span>
+            <span className="sidebar__version">API unreachable</span>
           )}
         </footer>
       </aside>
