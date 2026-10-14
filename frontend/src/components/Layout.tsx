@@ -1,6 +1,9 @@
-import { NavLink, Outlet } from 'react-router';
+import { Link, NavLink, Outlet } from 'react-router';
 
+import { useCurrentUser, usePermissions, useSignOut } from '../api/auth';
 import { useHealth } from '../api/queries';
+import { roleLabel } from '../lib/labels';
+import { Brand } from './Brand';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', end: true },
@@ -14,27 +17,65 @@ const NAV_ITEMS = [
   { to: '/schema', label: 'Event schema', end: false },
 ] as const;
 
+const ADMIN_ITEMS = [
+  { to: '/users', label: 'Users' },
+  { to: '/audit', label: 'Audit log' },
+] as const;
+
+function SessionPanel() {
+  const user = useCurrentUser().data;
+  const signOut = useSignOut();
+
+  if (!user) return null;
+  return (
+    <div className="session">
+      <Link className="session__user" to="/account" title="Your account">
+        <span className="session__name">{user.full_name ?? user.username}</span>
+        <span className="muted small">
+          {user.username} · {roleLabel(user.role)}
+        </span>
+      </Link>
+      <button
+        type="button"
+        className="link small"
+        disabled={signOut.isPending}
+        onClick={() => {
+          signOut.mutate(false);
+        }}
+      >
+        Sign out
+      </button>
+    </div>
+  );
+}
+
 export function Layout() {
   const health = useHealth();
+  const { canEdit, isAdmin } = usePermissions();
 
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand">
-          <svg className="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
-            <path d="M16 5 6 9v6.5c0 6 4.2 10.4 10 11.5 5.8-1.1 10-5.5 10-11.5V9L16 5z" />
-            <circle cx="16" cy="15.5" r="3.2" />
-          </svg>
-          <span className="brand__name">Watchpost</span>
-        </div>
+        <Brand />
         <nav className="nav" aria-label="Main">
           {NAV_ITEMS.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className="nav__link">
               {item.label}
             </NavLink>
           ))}
+          {isAdmin ? (
+            <>
+              <span className="nav__section">Administration</span>
+              {ADMIN_ITEMS.map((item) => (
+                <NavLink key={item.to} to={item.to} className="nav__link">
+                  {item.label}
+                </NavLink>
+              ))}
+            </>
+          ) : null}
         </nav>
         <footer className="sidebar__footer">
+          <SessionPanel />
           {health.data ? (
             <span>
               v{health.data.version} · {health.data.environment}
@@ -45,6 +86,12 @@ export function Layout() {
         </footer>
       </aside>
       <main className="content">
+        {canEdit ? null : (
+          <p className="notice" role="note">
+            You have read-only access. Ask an administrator if you need to triage alerts or work on
+            cases.
+          </p>
+        )}
         <Outlet />
       </main>
     </div>

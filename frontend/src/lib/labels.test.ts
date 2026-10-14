@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Activity } from '../api/types';
-import { describeActivity } from './labels';
+import {
+  auditActionLabel,
+  describeActivity,
+  formatAuditDetails,
+  isRefusal,
+  roleLabel,
+} from './labels';
 import { isTimeRange, rangeStart } from './time';
 
 function entry(action: string, details: Record<string, unknown> = {}): Activity {
@@ -32,6 +38,39 @@ describe('describeActivity', () => {
     [entry('case.archived'), 'case.archived'],
   ])('describes %o', (activity, expected) => {
     expect(describeActivity(activity)).toBe(expected);
+  });
+});
+
+describe('audit labels', () => {
+  it('names known actions and passes unknown ones through', () => {
+    expect(auditActionLabel('auth.login_failed')).toBe('Failed sign-in');
+    expect(auditActionLabel('rule.disabled')).toBe('Disabled a rule');
+    expect(auditActionLabel('backup.started')).toBe('backup.started');
+  });
+
+  it('flags refused sign-ins', () => {
+    expect(isRefusal('auth.login_blocked')).toBe(true);
+    expect(isRefusal('auth.login')).toBe(false);
+  });
+
+  it('formats details, including before-and-after changes', () => {
+    expect(
+      formatAuditDetails({
+        role: { from: 'analyst', to: 'admin' },
+        full_name: { from: null, to: 'Analyst One' },
+        filename: 'auth_2026.log',
+        fields: ['description', 'tags'],
+        everywhere: false,
+      }),
+    ).toBe(
+      'role: analyst → admin · full name: none → Analyst One · filename: auth_2026.log · ' +
+        'fields: description, tags · everywhere: false',
+    );
+    expect(formatAuditDetails({})).toBe('');
+  });
+
+  it('labels roles', () => {
+    expect(roleLabel('analyst')).toBe('Analyst');
   });
 });
 
