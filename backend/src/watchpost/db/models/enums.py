@@ -6,11 +6,23 @@ from enum import StrEnum
 
 
 class UserRole(StrEnum):
-    """Access level of a platform user."""
+    """Access level of a platform user.
+
+    Viewers read everything; analysts also triage, investigate, ingest and
+    manage threat intel; admins also edit rules and manage users.
+    """
 
     ADMIN = "admin"
     ANALYST = "analyst"
     VIEWER = "viewer"
+
+    @property
+    def rank(self) -> int:
+        return {UserRole.VIEWER: 0, UserRole.ANALYST: 1, UserRole.ADMIN: 2}[self]
+
+    def allows(self, required: UserRole) -> bool:
+        """Whether this role includes everything ``required`` may do."""
+        return self.rank >= required.rank
 
 
 class Severity(StrEnum):

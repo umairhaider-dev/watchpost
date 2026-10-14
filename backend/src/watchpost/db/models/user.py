@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Identity, Integer, String, true
+from sqlalchemy import Boolean, DateTime, Identity, Integer, String, text, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from watchpost.db.base import Base, TimestampMixin, str_enum
@@ -26,6 +26,8 @@ class User(TimestampMixin, Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Part of every session token; bumping it signs the user out everywhere.
+    session_version: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
 
     def __repr__(self) -> str:
         return f"<User id={self.id} username={self.username!r} role={self.role}>"
