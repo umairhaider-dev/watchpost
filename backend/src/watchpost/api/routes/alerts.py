@@ -430,10 +430,21 @@ async def get_timeline(
 async def enrich(
     alert_id: int,
     enricher: EnricherDep,
+    session: SessionDep,
+    actor: ActorDep,
     refresh: Annotated[bool, Query(description="Ask providers even if cached")] = False,
 ) -> dict[str, Any]:
     """Rebuild an alert's indicator context now and return it."""
     enrichment = await enrich_alert(enricher, alert_id, refresh=refresh)
     if enrichment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "alert not found")
+    await audit.record(
+        session,
+        "alert.enrichment_requested",
+        actor=actor,
+        target_type="alert",
+        target_id=alert_id,
+        details={"refresh": refresh},
+    )
+    await session.commit()
     return enrichment

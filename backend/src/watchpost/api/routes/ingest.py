@@ -12,7 +12,8 @@ from redis.exceptions import RedisError
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import distinct_on
 
-from watchpost.api.deps import QueueDep, SessionDep, SettingsDep
+from watchpost import audit
+from watchpost.api.deps import ActorDep, QueueDep, SessionDep, SettingsDep
 from watchpost.db.models import (
     DetectionRun,
     DetectionStatus,
@@ -133,6 +134,7 @@ async def upload_log_file(
     session: SessionDep,
     settings: SettingsDep,
     queue: QueueDep,
+    actor: ActorDep,
     file: Annotated[UploadFile, File(description="Log file (plain text, JSON or .gz)")],
     parser: Annotated[str, Form(description="Parser name, or 'auto' to detect")] = AUTO,
     host_name: Annotated[
@@ -168,6 +170,15 @@ async def upload_log_file(
         file_sha256=stored.sha256,
     )
     session.add(job)
+    await session.flush()
+    await audit.record(
+        session,
+        "ingest.uploaded",
+        actor=actor,
+        target_type="ingestion_job",
+        target_id=job.id,
+        details={"filename": job.filename, "bytes": job.file_size, "parser": parser},
+    )
     await session.commit()
     await session.refresh(job)
 

@@ -18,7 +18,8 @@ from redis.exceptions import RedisError
 from sqlalchemy import ColumnElement, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from watchpost.api.deps import EnricherDep, QueueDep, SessionDep, SettingsDep
+from watchpost import audit
+from watchpost.api.deps import ActorDep, EnricherDep, QueueDep, SessionDep, SettingsDep
 from watchpost.db.models import Event, Ioc, IocType, event_ioc_matches
 from watchpost.intel.alerts import intel_verdict, local_intel
 from watchpost.intel.enrichment import ProviderResult
@@ -333,7 +334,7 @@ async def list_iocs(
     responses={200: {"description": "The indicator already existed and was updated"}},
 )
 async def add_ioc(
-    body: IocCreate, session: SessionDep, queue: QueueDep, response: Response
+    body: IocCreate, session: SessionDep, queue: QueueDep, response: Response, actor: ActorDep
 ) -> IocOut:
     """Add one indicator (or refresh it if it is already known)."""
     ioc_type, value = _normalise(body.value, body.ioc_type)
@@ -348,8 +349,16 @@ async def add_ioc(
         expires_at=body.expires_at,
     )
     result = await upsert_iocs(session, [entry], source=body.source)
-    await session.commit()
     [ioc_id] = result.ioc_ids
+    await audit.record(
+        session,
+        "intel.ioc_added" if result.created else "intel.ioc_updated",
+        actor=actor,
+        target_type="ioc",
+        target_id=ioc_id,
+        details={"type": ioc_type.value, "value": value},
+    )
+    await session.commit()
     if not result.created:
         response.status_code = status.HTTP_200_OK
     await _queue_sweep(queue, [ioc_id])
@@ -371,6 +380,7 @@ async def add_ioc(
 async def import_feed(
     session: SessionDep,
     queue: QueueDep,
+    actor: ActorDep,
     file: Annotated[UploadFile, File(description="TXT (one indicator per line) or CSV feed")],
     source: Annotated[str | None, Form(max_length=128)] = None,
     confidence: Annotated[int | None, Form(ge=0, le=100)] = None,
@@ -413,6 +423,19 @@ async def import_feed(
             datetime.now(UTC) + timedelta(days=expires_in_days) if expires_in_days else None
         ),
     )
+    await audit.record(
+        session,
+        "intel.feed_imported",
+        actor=actor,
+        target_type="feed",
+        target_id=source_name,
+        details={
+            "filename": filename,
+            "created": result.created,
+            "updated": result.updated,
+            "problems": feed.problem_count,
+        },
+    )
     await session.commit()
     swept = await _queue_sweep(queue, result.ioc_ids) if result.ioc_ids else False
     return ImportOut(
@@ -432,12 +455,16 @@ async def import_feed(
 
 
 @router.post("/sweep", response_model=SweepOut, status_code=status.HTTP_202_ACCEPTED)
-async def sweep_all(queue: QueueDep) -> SweepOut:
+async def sweep_all(queue: QueueDep, session: SessionDep, actor: ActorDep) -> SweepOut:
     """Re-check every stored event against all active indicators."""
     if not await _queue_sweep(queue, None):
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "job queue unavailable; try again shortly"
         )
+    await audit.record(
+        session, "intel.sweep_requested", actor=actor, target_type="ioc", target_id="all"
+    )
+    await session.commit()
     return SweepOut(queued=True)
 
 
@@ -483,13 +510,23 @@ async def get_ioc(ioc_id: int, session: SessionDep) -> dict[str, Any]:
 
 
 @router.patch("/iocs/{ioc_id}", response_model=IocOut)
-async def update_ioc(ioc_id: int, body: IocUpdate, session: SessionDep, queue: QueueDep) -> IocOut:
+async def update_ioc(
+    ioc_id: int, body: IocUpdate, session: SessionDep, queue: QueueDep, actor: ActorDep
+) -> IocOut:
     """Change an indicator. Reactivating it sweeps stored events for it again."""
     ioc = await _get_ioc(session, ioc_id)
     changes = body.model_dump(exclude_unset=True)
     reactivated = changes.get("is_active") is True and not ioc.is_active
     for name, value in changes.items():
         setattr(ioc, name, value)
+    await audit.record(
+        session,
+        "intel.ioc_updated",
+        actor=actor,
+        target_type="ioc",
+        target_id=ioc.id,
+        details={"fields": sorted(changes), "value": ioc.value},
+    )
     await session.commit()
     await session.refresh(ioc)
     if reactivated:
@@ -499,10 +536,20 @@ async def update_ioc(ioc_id: int, body: IocUpdate, session: SessionDep, queue: Q
 
 
 @router.delete("/iocs/{ioc_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_ioc(ioc_id: int, session: SessionDep) -> None:
+async def remove_ioc(ioc_id: int, session: SessionDep, actor: ActorDep) -> None:
     """Delete an indicator; events it alone matched are no longer flagged."""
+    ioc = await session.get(Ioc, ioc_id)
+    value = ioc.value if ioc else None
     if not await delete_ioc(session, ioc_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "indicator not found")
+    await audit.record(
+        session,
+        "intel.ioc_deleted",
+        actor=actor,
+        target_type="ioc",
+        target_id=ioc_id,
+        details={"value": value},
+    )
     await session.commit()
 
 

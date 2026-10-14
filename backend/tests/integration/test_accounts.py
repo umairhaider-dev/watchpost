@@ -127,8 +127,9 @@ async def test_users_api_lists_assignable_users(
     everyone = (await client.get("/api/users")).json()
     assignable = (await client.get("/api/users", params={"assignable": True})).json()
 
-    assert [user["username"] for user in everyone] == ["analyst.one", "viewer.one"]
-    assert [user["username"] for user in assignable] == ["analyst.one"]
+    # test.admin is the user the client is signed in as.
+    assert [user["username"] for user in everyone] == ["analyst.one", "test.admin", "viewer.one"]
+    assert [user["username"] for user in assignable] == ["analyst.one", "test.admin"]
     assert "password_hash" not in everyone[0]
 
 

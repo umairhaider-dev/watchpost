@@ -80,9 +80,9 @@ async def test_markdown_report(client: AsyncClient, db_session: AsyncSession) ->
     assert "````\npowershell -enc ```SQBFAFgA```\n````" in text
     assert "> Decoded payload" in text
     assert "> Isolated the host.\n> Reimaged it." in text
-    assert "unattributed opened the case" in text
-    assert "unattributed assigned the case to analyst.one" in text
-    assert "unattributed changed the status from open to resolved" in text
+    assert "test.admin opened the case" in text
+    assert "test.admin assigned the case to analyst.one" in text
+    assert "test.admin changed the status from open to resolved" in text
 
 
 async def test_pdf_report(client: AsyncClient, db_session: AsyncSession) -> None:

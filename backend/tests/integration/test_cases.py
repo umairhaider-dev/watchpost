@@ -188,7 +188,7 @@ async def test_notes(client: AsyncClient) -> None:
 
     assert first.status_code == 201
     assert first.json()["body"] == "Checked the VPN logs: nothing."
-    assert first.json()["author"] is None  # no sign-in yet
+    assert first.json()["author"] == "test.admin"
     detail = (await client.get(f"/api/cases/{case['id']}")).json()
     assert [note["body"] for note in detail["notes"]] == [
         "Checked the VPN logs: nothing.",

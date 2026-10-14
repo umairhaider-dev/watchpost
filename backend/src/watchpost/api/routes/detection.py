@@ -11,7 +11,8 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validato
 from redis.exceptions import RedisError
 from sqlalchemy import select
 
-from watchpost.api.deps import QueueDep, SessionDep
+from watchpost import audit
+from watchpost.api.deps import ActorDep, QueueDep, SessionDep
 from watchpost.db.models import DetectionRun, DetectionStatus, DetectionTrigger, Rule
 from watchpost.detection.runner import create_run
 
@@ -57,7 +58,7 @@ class DetectionRunOut(BaseModel):
 
 @router.post("/runs", response_model=DetectionRunOut, status_code=status.HTTP_202_ACCEPTED)
 async def start_run(
-    body: DetectionRunRequest, session: SessionDep, queue: QueueDep
+    body: DetectionRunRequest, session: SessionDep, queue: QueueDep, actor: ActorDep
 ) -> DetectionRun:
     """Queue a detection run over a time range (all stored events if no range is given)."""
     if body.rule_ids is not None:
@@ -73,6 +74,19 @@ async def start_run(
         start=body.start,
         end=body.end,
         rule_ids=body.rule_ids,
+        created_by_id=actor.id if actor else None,
+    )
+    await audit.record(
+        session,
+        "detection.run_started",
+        actor=actor,
+        target_type="detection_run",
+        target_id=run.id,
+        details={
+            "start": body.start.isoformat() if body.start else None,
+            "end": body.end.isoformat() if body.end else None,
+            "rule_ids": body.rule_ids,
+        },
     )
     await session.commit()
     await session.refresh(run)

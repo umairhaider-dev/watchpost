@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated
 
 import pytest
 from fakeredis import FakeAsyncRedis
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -15,8 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from tests.fake_services import FakeServices, make_enricher
 from tests.integration.helpers import RULES_DIR
 from watchpost.api.app import create_app
-from watchpost.api.deps import AppResources, get_session
+from watchpost.api.deps import AppResources, current_user, get_session
 from watchpost.core.config import Settings
+from watchpost.core.passwords import hash_password
+from watchpost.db.models import User, UserRole
 from watchpost.detection.store import sync_builtin_rules
 from watchpost.intel.enrichment import Enricher
 
@@ -118,8 +122,68 @@ async def enricher(
         yield make_enricher(session_factory, fake_redis, client, providers=[])
 
 
+# Hashed once for the whole run: Argon2 is deliberately slow.
+TEST_PASSWORD = "correct-horse-battery"
+TEST_PASSWORD_HASH = hash_password(TEST_PASSWORD)
+
+
+async def add_user(session: AsyncSession, username: str, role: UserRole) -> User:
+    """A user with :data:`TEST_PASSWORD`, without paying for a fresh hash."""
+    user = User(username=username, password_hash=TEST_PASSWORD_HASH, role=role)
+    session.add(user)
+    await session.flush()
+    return user
+
+
 @pytest.fixture
-def app(
+async def admin(db_session: AsyncSession) -> User:
+    """The user the default ``client`` is signed in as.
+
+    Committed (to a savepoint of the test transaction), so a route that rolls
+    back its own work cannot take the signed-in user with it.
+    """
+    user = await add_user(db_session, "test.admin", UserRole.ADMIN)
+    await db_session.commit()
+    return user
+
+
+@dataclass(frozen=True, slots=True)
+class AppParts:
+    """What every test application is wired to."""
+
+    settings: Settings
+    engine: AsyncEngine
+    db_session: AsyncSession
+    redis: FakeAsyncRedis
+    queue: RecordingQueue
+    session_factory: async_sessionmaker[AsyncSession]
+    enricher: Enricher
+
+    def build(self) -> FastAPI:
+        """A fresh application on these resources; nobody is signed in.
+
+        Request sessions share the test's transaction, so anything a test
+        inserts is visible to the API and rolled back afterwards.
+        """
+        application = create_app(self.settings)
+        application.state.resources = AppResources(
+            engine=self.engine,
+            session_factory=self.session_factory,
+            redis=self.redis,
+            queue=self.queue,
+            enricher=self.enricher,
+        )
+        db_session = self.db_session
+
+        async def _session_override() -> AsyncIterator[AsyncSession]:
+            yield db_session
+
+        application.dependency_overrides[get_session] = _session_override
+        return application
+
+
+@pytest.fixture
+def app_parts(
     app_settings: Settings,
     engine: AsyncEngine,
     db_session: AsyncSession,
@@ -127,30 +191,46 @@ def app(
     queue: RecordingQueue,
     session_factory: async_sessionmaker[AsyncSession],
     enricher: Enricher,
-) -> FastAPI:
-    """The real application wired to the test database, an in-memory Redis and a fake queue.
+) -> AppParts:
+    return AppParts(app_settings, engine, db_session, fake_redis, queue, session_factory, enricher)
 
-    Request sessions share the test's transaction, so anything a test inserts
-    is visible to the API and rolled back afterwards.
+
+@pytest.fixture
+def anonymous_app(app_parts: AppParts) -> FastAPI:
+    """The real application with nobody signed in."""
+    return app_parts.build()
+
+
+@pytest.fixture
+def app(app_parts: AppParts, admin: User) -> FastAPI:
+    """A separate application instance with :func:`admin` signed in for every request.
+
+    Sign-in itself, CSRF and roles are covered by the auth tests, which use
+    ``anonymous_client``.
     """
-    application = create_app(app_settings)
-    application.state.resources = AppResources(
-        engine=engine,
-        session_factory=session_factory,
-        redis=fake_redis,
-        queue=queue,
-        enricher=enricher,
-    )
+    application = app_parts.build()
+    admin_id = admin.id
 
-    async def _session_override() -> AsyncIterator[AsyncSession]:
-        yield db_session
+    async def _signed_in(session: Annotated[AsyncSession, Depends(get_session)]) -> User:
+        # Loaded through the request's session, as real sign-in does, so it is
+        # fresh even after a test expires everything in the session.
+        user = await session.get(User, admin_id)
+        assert user is not None
+        return user
 
-    application.dependency_overrides[get_session] = _session_override
+    application.dependency_overrides[current_user] = _signed_in
     return application
 
 
 @pytest.fixture
 async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as http:
+        yield http
+
+
+@pytest.fixture
+async def anonymous_client(anonymous_app: FastAPI) -> AsyncIterator[AsyncClient]:
+    transport = ASGITransport(app=anonymous_app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as http:
         yield http

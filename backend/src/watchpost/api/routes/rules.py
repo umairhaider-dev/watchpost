@@ -12,7 +12,8 @@ from fastapi import APIRouter, HTTPException, Path, Response, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
-from watchpost.api.deps import SessionDep
+from watchpost import audit
+from watchpost.api.deps import AdminDep, SessionDep
 from watchpost.db.models import OPEN_ALERT_STATUSES, Alert, Rule, RuleOrigin, RuleType, Severity
 from watchpost.detection.compiler import compile_rule
 from watchpost.detection.errors import RuleError
@@ -295,8 +296,8 @@ def _sample_event(line: int, row: EventRow) -> SampleEvent:
 
 
 @router.post("", response_model=RuleDetail, status_code=status.HTTP_201_CREATED)
-async def create_rule(body: RuleSource, session: SessionDep) -> RuleDetail:
-    """Add a custom rule."""
+async def create_rule(body: RuleSource, session: SessionDep, admin: AdminDep) -> RuleDetail:
+    """Add a custom rule (admins only)."""
     definition = _parse(body.source_yaml)
     if await session.get(Rule, definition.id) is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, f"a rule with id {definition.id!r} exists")
@@ -307,6 +308,8 @@ async def create_rule(body: RuleSource, session: SessionDep) -> RuleDetail:
         **rule_columns(definition, body.source_yaml),
     )
     session.add(rule)
+    await session.flush()
+    await audit.record(session, "rule.created", actor=admin, target_type="rule", target_id=rule.id)
     await session.commit()
     await session.refresh(rule)
     logger.info("Created custom rule %s", rule.id)
@@ -319,10 +322,20 @@ async def get_rule(rule_id: RuleId, session: SessionDep) -> RuleDetail:
 
 
 @router.patch("/{rule_id}", response_model=RuleDetail)
-async def toggle_rule(rule_id: RuleId, body: RuleToggle, session: SessionDep) -> RuleDetail:
-    """Enable or disable a rule."""
+async def toggle_rule(
+    rule_id: RuleId, body: RuleToggle, session: SessionDep, admin: AdminDep
+) -> RuleDetail:
+    """Enable or disable a rule (admins only)."""
     rule = await _get_rule(session, rule_id)
-    rule.enabled = body.enabled
+    if rule.enabled != body.enabled:
+        rule.enabled = body.enabled
+        await audit.record(
+            session,
+            "rule.enabled" if body.enabled else "rule.disabled",
+            actor=admin,
+            target_type="rule",
+            target_id=rule.id,
+        )
     await session.commit()
     await session.refresh(rule)
     logger.info("Rule %s %s", rule.id, "enabled" if rule.enabled else "disabled")
@@ -330,8 +343,10 @@ async def toggle_rule(rule_id: RuleId, body: RuleToggle, session: SessionDep) ->
 
 
 @router.put("/{rule_id}", response_model=RuleDetail)
-async def update_rule(rule_id: RuleId, body: RuleSource, session: SessionDep) -> RuleDetail:
-    """Replace a rule's YAML. Edited built-in rules are no longer updated by rule sync."""
+async def update_rule(
+    rule_id: RuleId, body: RuleSource, session: SessionDep, admin: AdminDep
+) -> RuleDetail:
+    """Replace a rule's YAML (admins only). Edited built-in rules are no longer synced."""
     rule = await _get_rule(session, rule_id)
     definition = _parse(body.source_yaml)
     if definition.id != rule_id:
@@ -346,6 +361,14 @@ async def update_rule(rule_id: RuleId, body: RuleSource, session: SessionDep) ->
     rule.version += 1
     if rule.origin is RuleOrigin.BUILTIN:
         rule.modified = True
+    await audit.record(
+        session,
+        "rule.updated",
+        actor=admin,
+        target_type="rule",
+        target_id=rule.id,
+        details={"version": rule.version},
+    )
     await session.commit()
     await session.refresh(rule)
     logger.info("Rule %s updated to version %d", rule.id, rule.version)
@@ -353,14 +376,15 @@ async def update_rule(rule_id: RuleId, body: RuleSource, session: SessionDep) ->
 
 
 @router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_rule(rule_id: RuleId, session: SessionDep) -> Response:
-    """Delete a custom rule. Built-in rules can only be disabled."""
+async def delete_rule(rule_id: RuleId, session: SessionDep, admin: AdminDep) -> Response:
+    """Delete a custom rule (admins only). Built-in rules can only be disabled."""
     rule = await _get_rule(session, rule_id)
     if rule.origin is RuleOrigin.BUILTIN:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "built-in rules cannot be deleted; disable them instead"
         )
     await session.delete(rule)
+    await audit.record(session, "rule.deleted", actor=admin, target_type="rule", target_id=rule_id)
     await session.commit()
     logger.info("Deleted custom rule %s", rule_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
