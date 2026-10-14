@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatBytes, formatDuration, formatNumber, formatUtc, progressPercent } from './format';
+import {
+  formatBucket,
+  formatBytes,
+  formatDuration,
+  formatNumber,
+  formatSeconds,
+  formatUtc,
+  progressPercent,
+} from './format';
 
 describe('formatBytes', () => {
   it.each([
@@ -44,5 +52,24 @@ describe('other formatters', () => {
     expect(progressPercent(50, 200)).toBe(25);
     expect(progressPercent(300, 200)).toBe(100);
     expect(progressPercent(10, 0)).toBe(0);
+  });
+});
+
+describe('formatSeconds', () => {
+  it.each([
+    [null, '—'],
+    [45.4, '45 s'],
+    [720, '12 min'],
+    [12_600, '3.5 h'],
+    [181_440, '2.1 d'],
+  ])('formats %s', (seconds, expected) => {
+    expect(formatSeconds(seconds)).toBe(expected);
+  });
+});
+
+describe('formatBucket', () => {
+  it('shows the hour for sub-day buckets and the date otherwise', () => {
+    expect(formatBucket('2026-10-12T09:00:00Z', 3600)).toBe('10-12 09:00');
+    expect(formatBucket('2026-10-12T00:00:00Z', 86_400)).toBe('2026-10-12');
   });
 });

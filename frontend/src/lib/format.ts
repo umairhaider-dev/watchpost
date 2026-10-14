@@ -42,3 +42,18 @@ export function progressPercent(processed: number, total: number): number {
   if (total <= 0) return 0;
   return Math.min(100, Math.round((processed / total) * 100));
 }
+
+/** A length of time in the largest sensible unit: 45 s, 12 min, 3.5 h, 2.1 d. */
+export function formatSeconds(seconds: number | null): string {
+  if (seconds === null || !Number.isFinite(seconds)) return '—';
+  if (seconds < 60) return `${String(Math.round(seconds))} s`;
+  if (seconds < 3_600) return `${String(Math.round(seconds / 60))} min`;
+  if (seconds < 86_400) return `${(seconds / 3_600).toFixed(1)} h`;
+  return `${(seconds / 86_400).toFixed(1)} d`;
+}
+
+/** A chart bucket's start: date and hour for sub-day buckets, otherwise the date. */
+export function formatBucket(iso: string, bucketSeconds: number): string {
+  const text = new Date(iso).toISOString();
+  return bucketSeconds < 86_400 ? `${text.slice(5, 10)} ${text.slice(11, 16)}` : text.slice(0, 10);
+}

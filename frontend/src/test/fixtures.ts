@@ -4,6 +4,7 @@ import type {
   AlertSummary,
   CaseDetail,
   CaseSummary,
+  Dashboard,
   DetectionRun,
   EventRecord,
   Ioc,
@@ -283,6 +284,68 @@ export function caseDetail(overrides: Partial<CaseDetail> = {}): CaseDetail {
     tactics: ['TA0006'],
     techniques: ['T1110.001'],
     entities: { hosts: ['web-01'], ips: ['203.0.113.45'], users: ['root'] },
+    ...overrides,
+  };
+}
+
+/** ``count`` consecutive hourly bucket starts. */
+function hourly(count: number): string[] {
+  const start = Date.parse('2026-10-14T00:00:00Z');
+  return Array.from({ length: count }, (_, index) =>
+    new Date(start + index * 3_600_000).toISOString(),
+  );
+}
+
+export function dashboard(overrides: Partial<Dashboard> = {}): Dashboard {
+  const buckets = hourly(4);
+  return {
+    range: '24h',
+    start: '2026-10-13T04:00:00Z',
+    end: '2026-10-14T04:00:00Z',
+    bucket_seconds: 3600,
+    totals: {
+      alerts: 6,
+      open_alerts: 4,
+      new_alerts: 3,
+      unassigned_open_alerts: 2,
+      open_cases: 1,
+      events: 1234,
+    },
+    alerts_over_time: buckets.map((bucket, index) => ({
+      bucket,
+      critical: index === 1 ? 1 : 0,
+      high: 0,
+      medium: index === 2 ? 4 : 0,
+      low: index === 3 ? 1 : 0,
+      informational: 0,
+    })),
+    alerts_by_severity: [
+      { severity: 'critical', count: 1, open: 1 },
+      { severity: 'high', count: 0, open: 0 },
+      { severity: 'medium', count: 4, open: 3 },
+      { severity: 'low', count: 1, open: 0 },
+      { severity: 'informational', count: 0, open: 0 },
+    ],
+    top_source_ips: [
+      { value: '203.0.113.45', alerts: 4, events: 31, known_bad: true },
+      { value: '198.51.100.23', alerts: 1, events: 12, known_bad: false },
+    ],
+    top_users: [{ value: 'root', alerts: 3, events: 20, known_bad: false }],
+    top_rules: [
+      { rule_id: 'ssh-brute-force', title: 'SSH brute force', severity: 'medium', alerts: 3 },
+    ],
+    ingestion: {
+      series: buckets.map((bucket, index) => ({
+        bucket,
+        events: index === 0 ? 1234 : 0,
+        jobs: index === 0 ? 2 : 0,
+      })),
+      events_ingested: 1234,
+      jobs: 2,
+      events_per_second: 617.4,
+    },
+    case_resolution: { resolved: 2, mean_seconds: 14_400, median_seconds: 7_200 },
+    alert_resolution: { resolved: 0, mean_seconds: null, median_seconds: null },
     ...overrides,
   };
 }

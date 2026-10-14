@@ -103,6 +103,20 @@ describe('AlertsPage', () => {
     expect(screen.getByLabelText('Host')).toHaveValue('');
   });
 
+  it('takes severity and status filters from the address', async () => {
+    const fetchMock = stubQueue();
+    renderAt('/alerts?severity=critical&severity=bogus&status=new');
+    await screen.findByRole('link', { name: 'SSH brute force: 203.0.113.45' });
+
+    const params = lastAlertQuery(fetchMock);
+    expect(params.getAll('severity')).toEqual(['critical']);
+    expect(params.getAll('status')).toEqual(['new']);
+    expect(screen.getByRole('button', { name: 'critical' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
   it('updates the status of selected alerts in bulk', async () => {
     const user = userEvent.setup();
     const sent: unknown[] = [];

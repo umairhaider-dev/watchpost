@@ -35,8 +35,19 @@ const TEXT_FILTERS: { key: TextFilter; label: string; placeholder: string; param
   { key: 'technique', label: 'Technique', placeholder: 'T1110', param: 'technique' },
 ];
 
+const STATUS_VALUES = new Set<string>(ALERT_STATUSES.map((option) => option.value));
+
 function filtersFromUrl(params: URLSearchParams): AlertFilters {
-  const filters: AlertFilters = { ...DEFAULT_ALERT_FILTERS, ruleId: params.get('rule') ?? '' };
+  const filters: AlertFilters = {
+    ...DEFAULT_ALERT_FILTERS,
+    ruleId: params.get('rule') ?? '',
+    severity: params
+      .getAll('severity')
+      .filter((value): value is Severity => (SEVERITIES as string[]).includes(value)),
+    status: params
+      .getAll('status')
+      .filter((value): value is AlertStatus => STATUS_VALUES.has(value)),
+  };
   for (const { key, param } of TEXT_FILTERS) filters[key] = params.get(param) ?? '';
   return filters;
 }

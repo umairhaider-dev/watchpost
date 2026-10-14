@@ -545,3 +545,64 @@ export interface AttackMatrix {
   techniques_covered: number;
   techniques_detected: number;
 }
+
+// ---------------------------------------------------------------- dashboard
+
+export type DashboardRange = '24h' | '7d' | '30d' | 'all';
+
+export interface SeverityBucket {
+  bucket: string;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  informational: number;
+}
+
+export interface RankedEntity {
+  value: string;
+  alerts: number;
+  events: number;
+  known_bad: boolean;
+}
+
+export interface RuleCount {
+  rule_id: string;
+  title: string;
+  severity: Severity;
+  alerts: number;
+}
+
+export interface Resolution {
+  resolved: number;
+  mean_seconds: number | null;
+  median_seconds: number | null;
+}
+
+export interface Dashboard {
+  range: DashboardRange;
+  start: string | null;
+  end: string;
+  bucket_seconds: number;
+  totals: {
+    alerts: number;
+    open_alerts: number;
+    new_alerts: number;
+    unassigned_open_alerts: number;
+    open_cases: number;
+    events: number;
+  };
+  alerts_over_time: SeverityBucket[];
+  alerts_by_severity: { severity: Severity; count: number; open: number }[];
+  top_source_ips: RankedEntity[];
+  top_users: RankedEntity[];
+  top_rules: RuleCount[];
+  ingestion: {
+    series: { bucket: string; events: number; jobs: number }[];
+    events_ingested: number;
+    jobs: number;
+    events_per_second: number | null;
+  };
+  case_resolution: Resolution;
+  alert_resolution: Resolution;
+}
