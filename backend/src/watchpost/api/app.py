@@ -15,11 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from watchpost import __version__
 from watchpost.api.deps import AppResources
-from watchpost.api.middleware import RequestSizeLimitMiddleware
+from watchpost.api.middleware import RequestSizeLimitMiddleware, SecurityHeadersMiddleware
 from watchpost.api.routes import api_router
 from watchpost.api.routes.ingest import UPLOAD_PATH
 from watchpost.api.routes.intel import FEED_IMPORT_PATH, MAX_FEED_BYTES
 from watchpost.api.routes.rules import RULE_TEST_MAX_BODY_BYTES, RULE_TEST_PATH
+from watchpost.auth.tokens import CSRF_HEADER
 from watchpost.core.config import Settings, get_settings, log_configuration_warnings
 from watchpost.core.logging import configure_logging
 from watchpost.db.session import create_engine, create_session_factory
@@ -82,7 +83,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", CSRF_HEADER],
     )
     app.add_middleware(
         RequestSizeLimitMiddleware,
@@ -93,6 +94,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             (FEED_IMPORT_PATH, MAX_FEED_BYTES + MULTIPART_OVERHEAD_BYTES),
             (RULE_TEST_PATH, RULE_TEST_MAX_BODY_BYTES),
         ],
+    )
+    # Added last, so it wraps everything and also covers error responses.
+    app.add_middleware(
+        SecurityHeadersMiddleware, docs_path=app.docs_url, hsts=settings.is_production
     )
     app.include_router(api_router, prefix="/api")
     return app
