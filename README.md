@@ -9,7 +9,8 @@ It is a defensive tool only: it reads and analyses logs and never scans, probes 
 modifies other systems.
 
 > **Status:** log ingestion, detection, threat intelligence, alert triage, case
-> management and the dashboard are in place. Sign-in with roles comes next.
+> management, the dashboard and sign-in with roles are in place. A sample data
+> generator and benchmarks come next.
 
 ## Architecture
 
@@ -22,7 +23,7 @@ flowchart LR
         NGINX[frontend<br/>nginx: static UI + /api proxy]
         API[api<br/>FastAPI]
         WORKER[worker<br/>arq]
-        REDIS[(redis<br/>job queue)]
+        REDIS[(redis<br/>job queue, login throttle)]
         DB[(PostgreSQL<br/>events, alerts, cases)]
         MIGRATE[migrate<br/>schema + built-in rules]
     end
@@ -66,12 +67,14 @@ docker compose up --build
 All ports bind to `127.0.0.1` only. Set `WATCHPOST_ENV=production` and a real
 `WATCHPOST_SECRET_KEY` before exposing the stack anywhere.
 
-Create an analyst account so alerts and cases can be assigned (you are asked for the
+Every page needs a sign-in. Create the first admin account (you are asked for the
 password twice; it must be at least 12 characters):
 
 ```bash
-docker compose exec api watchpost create-user analyst.one --role analyst --full-name "Analyst One"
+docker compose exec api watchpost create-user admin --role admin --full-name "Admin"
 ```
+
+Then sign in at http://localhost:3000 and add everyone else from **Users**.
 
 ## Normalised event schema
 
@@ -454,6 +457,86 @@ still chart where the activity happened. The ingestion rate is read from the ing
 jobs rather than by scanning events, so the page stays fast as the event table grows.
 Every figure comes from `GET /api/dashboard?range=24h|7d|30d|all`.
 
+## Security
+
+### Sign-in and sessions
+
+Passwords are hashed with Argon2id and must be 12 to 256 characters. Signing in from the
+browser sets two cookies:
+
+- `watchpost_session`: a signed JWT (HS256 with `WATCHPOST_SECRET_KEY`) holding the user
+  id, a session version and a per-session CSRF secret. It is `HttpOnly`,
+  `SameSite=Strict`, limited to `/api`, and `Secure` in production. Sessions last
+  `WATCHPOST_SESSION_HOURS` (8 by default).
+- `watchpost_csrf`: the same CSRF secret, readable by the UI, which sends it back in an
+  `X-CSRF-Token` header on every request that changes data. A request whose header does
+  not match its session is refused with 403.
+
+Changing a password, signing out everywhere, an admin resetting someone's password and
+deactivating an account all raise the user's session version, which ends every session
+issued before it at once.
+
+Failed sign-ins are counted per user name and per client address in Redis. After
+`WATCHPOST_LOGIN_MAX_FAILURES` failures (5) within `WATCHPOST_LOGIN_WINDOW_MINUTES` (15)
+further attempts get `429` with a `Retry-After` header. A successful sign-in clears the
+count for that user name but not for the address, so spraying many names from one place
+stays blocked. Unknown user names take as long to check as real ones and get the same
+answer. If Redis is unreachable the throttle logs a warning and lets attempts through
+rather than locking everyone out.
+
+### Roles
+
+| Role | Can |
+| --- | --- |
+| Viewer | Read everything except the user list details and the audit log. |
+| Analyst | Everything a viewer can, plus triage alerts, work cases, upload logs, start detection runs, manage threat intel and validate or test rules. |
+| Admin | Everything an analyst can, plus create, edit, enable and delete rules, manage users and read the audit log. |
+
+The API enforces this on every route; the UI hides or disables what a role cannot use.
+Admins cannot change their own role or deactivate themselves, so an active admin always
+remains.
+
+### API access for scripts
+
+Scripts get a bearer token with the OAuth2 password flow and send it in an
+`Authorization` header. Bearer requests need no CSRF header. The **Authorize** button on
+`/api/docs` uses the same flow.
+
+```bash
+token=$(curl -s -d username=analyst.one -d password='...' \
+  http://localhost:8000/api/auth/token | python -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+curl -H "Authorization: Bearer $token" http://localhost:8000/api/alerts
+```
+
+### Audit log
+
+Every sign-in, failed or blocked sign-in, sign-out and password change is recorded, along
+with alert status changes and assignments, all case work, rule edits and toggles, log
+uploads, detection runs, threat intel changes and account management. Each entry holds
+the user, the action, its target, what changed, the client address and the browser.
+Admins read it on the **Audit log** page or at `GET /api/audit`, filtered by area, user
+or target. Entries cannot be edited or deleted through the app.
+
+### Hardening
+
+- **Input validation:** every request body and query parameter is validated by a
+  Pydantic model with length limits, and all database access goes through SQLAlchemy
+  with bound parameters, including the event search language.
+- **Uploads:** log files are capped by `WATCHPOST_MAX_UPLOAD_BYTES` and feeds at 20 MiB,
+  both checked while streaming. Content is sniffed rather than trusting the file name:
+  only text logs (or gzip of one) are accepted, and binaries, zip archives and `.evtx`
+  files are refused with an explanation.
+- **Headers:** API responses carry `Content-Security-Policy: default-src 'none'`,
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy:
+  no-referrer`, `Cache-Control: no-store` and cross-origin isolation headers, plus HSTS
+  in production. nginx sends a strict CSP and the same protections for the UI.
+- **CORS:** only the origins in `WATCHPOST_CORS_ORIGINS` are allowed, with no wildcards.
+  The bundled UI is served from the same origin through nginx and needs no CORS at all.
+- **Proxies:** uvicorn trusts `X-Forwarded-For` only from private address ranges, so the
+  audit log and the login throttle see the real client behind nginx.
+- **Secrets:** production refuses to start without `WATCHPOST_SECRET_KEY`. Only
+  `.env.example` is in the repository; the real `.env` is ignored by git.
+
 ## Data model
 
 | Table | Purpose |
@@ -536,6 +619,7 @@ backend/
     intel/       indicator parsing, feeds, matching, sweeps, providers, enrichment
     investigation/  alert triage, cases, timelines, entity profiles, ATT&CK matrix, reports
     search/      the event query language: parser and SQL compiler
+    auth/        session tokens, sign-in checks and the login throttle
     accounts.py, audit.py, cli.py   users, the audit trail and the `watchpost` command
     dashboard.py the overview figures
     api/         FastAPI app factory, middleware, dependencies, routes
