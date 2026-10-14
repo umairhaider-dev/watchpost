@@ -42,6 +42,26 @@ async def test_admins_create_users(client: AsyncClient, db_session: AsyncSession
     assert (duplicate.status_code, weak.status_code, bad_name.status_code) == (409, 422, 422)
 
 
+async def test_only_admins_see_contact_details(
+    client: AsyncClient,
+    anonymous_client: AsyncClient,
+    db_session: AsyncSession,
+    app_settings: Settings,
+) -> None:
+    analyst = await add_user(db_session, "analyst.one", UserRole.ANALYST)
+    analyst.email = "analyst.one@example.org"
+    await db_session.flush()
+    bearer = {"Authorization": f"Bearer {issue_session(analyst, app_settings).token}"}
+
+    as_admin = (await client.get("/api/users")).json()
+    as_analyst = (await anonymous_client.get("/api/users", headers=bearer)).json()
+
+    assert [user["username"] for user in as_analyst] == ["analyst.one", "test.admin"]
+    assert as_admin[0]["email"] == "analyst.one@example.org"
+    assert {"email", "last_login_at", "created_at"} <= set(as_admin[0])
+    assert set(as_analyst[0]) == {"id", "username", "full_name", "role", "is_active"}
+
+
 async def test_role_and_activation_changes(
     client: AsyncClient,
     anonymous_client: AsyncClient,

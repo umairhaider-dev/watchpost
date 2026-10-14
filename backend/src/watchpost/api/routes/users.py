@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from watchpost import audit
 from watchpost.accounts import ASSIGNABLE_ROLES, USERNAME_PATTERN, AccountError, create_user
-from watchpost.api.deps import AdminDep, SessionDep
+from watchpost.api.deps import AdminDep, SessionDep, UserDep
 from watchpost.auth.service import set_password
 from watchpost.core.passwords import MAX_PASSWORD_LENGTH, WeakPasswordError
 from watchpost.db.models import User, UserRole
@@ -53,18 +53,22 @@ class PasswordReset(BaseModel):
     password: str = Field(min_length=1, max_length=MAX_PASSWORD_LENGTH)
 
 
-@router.get("", response_model=list[UserDetail])
+@router.get("", response_model=list[UserDetail | UserOut])
 async def list_users(
     session: SessionDep,
+    viewer: UserDep,
     assignable: Annotated[
         bool, Query(description="Only active analysts and admins, who can own alerts and cases")
     ] = False,
-) -> list[User]:
-    """Users by name."""
+) -> list[UserDetail] | list[UserOut]:
+    """Users by name. Only admins see e-mail addresses and sign-in times."""
     query = select(User).order_by(User.username)
     if assignable:
         query = query.where(User.is_active.is_(True), User.role.in_(sorted(ASSIGNABLE_ROLES)))
-    return list(await session.scalars(query))
+    users = await session.scalars(query)
+    if viewer.role is UserRole.ADMIN:
+        return [UserDetail.model_validate(user) for user in users]
+    return [UserOut.model_validate(user) for user in users]
 
 
 async def _get_user(session: SessionDep, user_id: int) -> User:
