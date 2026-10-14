@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Annotated, Any
+import asyncio
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import ColumnElement, func, select
 
@@ -28,6 +29,7 @@ from watchpost.investigation.cases import (
     remove_evidence,
     set_case_status,
 )
+from watchpost.investigation.report import render_markdown, render_pdf
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -392,3 +394,37 @@ async def unpin_evidence(
     if not await remove_evidence(session, case, evidence_id, actor=actor):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "that evidence is not part of this case")
     await session.commit()
+
+
+@router.get(
+    "/{case_id}/report",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {"text/markdown": {}, "application/pdf": {}},
+            "description": "The report as a file download",
+        }
+    },
+)
+async def case_report(
+    case_id: int,
+    session: SessionDep,
+    report_format: Annotated[Literal["markdown", "pdf"], Query(alias="format")] = "markdown",
+) -> Response:
+    """Download the case report as Markdown or PDF."""
+    case_file = await _case_file(session, case_id)
+    generated_at = datetime.now(UTC)
+    if report_format == "pdf":
+        # Laying out a PDF is CPU work; keep the event loop free.
+        content = await asyncio.to_thread(render_pdf, case_file, generated_at=generated_at)
+        media_type, extension = "application/pdf", "pdf"
+    else:
+        content = render_markdown(case_file, generated_at=generated_at).encode("utf-8")
+        media_type, extension = "text/markdown; charset=utf-8", "md"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="case-{case_id}-report.{extension}"'
+        },
+    )
