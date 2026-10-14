@@ -123,7 +123,8 @@ describe('RuleDetailPage', () => {
     expect(save).toBeDisabled();
 
     await user.clear(editor);
-    await user.type(editor, RULE_YAML.replace('count: 10', 'count: 20').replaceAll('[', '[['));
+    // Paste rather than type: typing the whole definition key by key is slow enough to time out.
+    await user.paste(RULE_YAML.replace('count: 10', 'count: 20'));
     expect(screen.getByText(/marks this built-in rule as edited/)).toBeInTheDocument();
     await user.click(save);
 

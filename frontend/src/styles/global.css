@@ -952,3 +952,167 @@ input[type='text']:invalid:not(:placeholder-shown) {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- threat intel ---------- */
+
+input[type='number'] {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 7px 10px;
+  min-height: 34px;
+}
+
+input[type='number']:focus-visible,
+button.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button.link {
+  font: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.link:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.button--small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.verdict {
+  display: inline-block;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.verdict[data-verdict='malicious'] {
+  color: var(--sev-critical);
+  border-color: currentColor;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.verdict[data-verdict='suspicious'] {
+  color: var(--warn);
+  border-color: currentColor;
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.verdict[data-verdict='clean'] {
+  color: var(--ok);
+  border-color: rgba(52, 211, 153, 0.45);
+}
+
+.pill[data-lookup='rate_limited'] {
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.45);
+}
+
+.pill[data-lookup='error'] {
+  color: var(--error);
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.ioc-flag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--sev-critical);
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.ioc-value,
+.indicator__value {
+  word-break: break-all;
+}
+
+.enrichment {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+}
+
+.enrichment__header,
+.indicator__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.indicator-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.indicator {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.indicator-list > .indicator + .indicator {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.context-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.context-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.context-list__name {
+  min-width: 84px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.import-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

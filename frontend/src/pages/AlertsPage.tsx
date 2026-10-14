@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router';
 import { type AlertFilters, useAlert, useAlerts } from '../api/queries';
 import type { AlertStatus, Severity } from '../api/types';
 import { Card } from '../components/Card';
+import { EnrichmentPanel } from '../components/intel/EnrichmentPanel';
 import { PageHeader } from '../components/PageHeader';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { formatNumber, formatUtc } from '../lib/format';
@@ -28,6 +29,7 @@ function AlertEvidence({ id }: { id: number }) {
   return (
     <div className="event-details">
       {detail.rule ? <p className="prose small">{detail.rule.description}</p> : null}
+      <EnrichmentPanel alertId={id} enrichment={detail.enrichment} />
       <h3 className="subheading">
         Evidence ({detail.evidence.length} of {formatNumber(detail.event_count)} events)
       </h3>

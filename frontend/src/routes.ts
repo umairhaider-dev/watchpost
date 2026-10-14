@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { AlertsPage } from './pages/AlertsPage';
 import { EventsPage } from './pages/EventsPage';
 import { IngestPage } from './pages/IngestPage';
+import { IntelPage } from './pages/IntelPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { RuleDetailPage } from './pages/RuleDetailPage';
@@ -19,6 +20,7 @@ export const routes: RouteObject[] = [
       { path: 'alerts', Component: AlertsPage },
       { path: 'rules', Component: RulesPage },
       { path: 'rules/:ruleId', Component: RuleDetailPage },
+      { path: 'intel', Component: IntelPage },
       { path: 'ingest', Component: IngestPage },
       { path: 'events', Component: EventsPage },
       { path: 'schema', Component: SchemaPage },

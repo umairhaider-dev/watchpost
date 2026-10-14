@@ -1,4 +1,12 @@
-import type { AlertSummary, DetectionRun, RuleDetail, RuleSummary } from '../api/types';
+import type {
+  AlertEnrichment,
+  AlertSummary,
+  DetectionRun,
+  Ioc,
+  ProviderLookup,
+  RuleDetail,
+  RuleSummary,
+} from '../api/types';
 
 export function ruleSummary(overrides: Partial<RuleSummary> = {}): RuleSummary {
   return {
@@ -88,6 +96,88 @@ export function alertSummary(overrides: Partial<AlertSummary> = {}): AlertSummar
     case_id: null,
     created_at: '2026-10-12T09:05:00Z',
     updated_at: '2026-10-12T09:05:00Z',
+    ...overrides,
+  };
+}
+
+export const MIMIKATZ_SHA256 = '3c1f1a2b9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a';
+
+export function ioc(overrides: Partial<Ioc> = {}): Ioc {
+  return {
+    id: 1,
+    ioc_type: 'ip',
+    value: '203.0.113.45',
+    source: 'iocs.csv',
+    description: 'SSH brute-force source reported by several organisations',
+    confidence: 85,
+    tags: ['brute-force', 'ssh'],
+    is_active: true,
+    expires_at: null,
+    created_at: '2026-10-14T08:00:00Z',
+    updated_at: '2026-10-14T08:00:00Z',
+    match_count: 12,
+    last_matched_at: '2026-10-14T08:00:05Z',
+    ...overrides,
+  };
+}
+
+export function virusTotalAnswer(overrides: Partial<ProviderLookup> = {}): ProviderLookup {
+  return {
+    provider: 'virustotal',
+    label: 'VirusTotal',
+    status: 'ok',
+    verdict: 'malicious',
+    data: {
+      malicious: 52,
+      suspicious: 1,
+      harmless: 0,
+      undetected: 17,
+      name: 'm.exe',
+      file_type: 'Win32 EXE',
+      link: `https://www.virustotal.com/gui/file/${MIMIKATZ_SHA256}`,
+    },
+    fetched_at: '2026-10-14T09:00:00Z',
+    cached: false,
+    ...overrides,
+  };
+}
+
+export function enrichment(overrides: Partial<AlertEnrichment> = {}): AlertEnrichment {
+  return {
+    enriched_at: '2026-10-14T09:00:00Z',
+    verdict: 'malicious',
+    pending: false,
+    online: true,
+    indicators: [
+      {
+        type: 'ip',
+        value: '203.0.113.45',
+        fields: ['source.ip'],
+        verdict: 'malicious',
+        shared: false,
+        intel: [
+          {
+            id: 1,
+            type: 'ip',
+            value: '203.0.113.45',
+            source: 'iocs.csv',
+            description: 'SSH brute-force source reported by several organisations',
+            confidence: 85,
+            tags: ['brute-force', 'ssh'],
+          },
+        ],
+        providers: [],
+      },
+      {
+        type: 'sha256',
+        value: MIMIKATZ_SHA256,
+        fields: ['Hashes'],
+        verdict: 'malicious',
+        shared: true,
+        intel: [],
+        providers: [virusTotalAnswer()],
+      },
+    ],
     ...overrides,
   };
 }

@@ -127,4 +127,17 @@ describe('RulesPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('job queue unavailable');
   });
+
+  it('labels runs started by new threat intel', async () => {
+    stubApi((path) => {
+      if (path === '/rules') return { status: 200, body: [] };
+      if (path === '/detection/runs') {
+        return { status: 200, body: [detectionRun({ id: 9, trigger: 'intel' })] };
+      }
+      return undefined;
+    });
+    renderAt('/rules');
+
+    expect(await screen.findByText(/#9 · events matching new threat intel/)).toBeInTheDocument();
+  });
 });

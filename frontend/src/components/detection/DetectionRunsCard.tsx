@@ -17,6 +17,7 @@ type RangeValue = (typeof RANGES)[number]['value'];
 
 function describeScope(run: DetectionRun): string {
   if (run.ingest_job_id !== null) return `ingestion job #${String(run.ingest_job_id)}`;
+  if (run.trigger === 'intel') return 'events matching new threat intel';
   if (run.range_start) return `since ${formatUtc(run.range_start)}`;
   return 'all stored events';
 }

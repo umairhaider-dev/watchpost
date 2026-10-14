@@ -1,10 +1,12 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AlertDetail } from '../api/types';
-import { alertSummary } from '../test/fixtures';
+import { alertSummary, enrichment, MIMIKATZ_SHA256, virusTotalAnswer } from '../test/fixtures';
 import { renderAt, stubApi } from '../test/utils';
+
+type Reply = { status: number; body?: unknown } | undefined;
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -117,5 +119,105 @@ describe('AlertsPage', () => {
     await user.click(await screen.findByRole('button', { name: /SSH brute force/ }));
 
     expect(await screen.findByText('Could not load this alert.')).toBeInTheDocument();
+  });
+});
+
+describe('AlertsPage threat intelligence', () => {
+  /** Open the alert's details; ``enrich`` answers POST /alerts/11/enrich (given ?refresh). */
+  async function openAlert(detail: AlertDetail, enrich?: (refresh: string | null) => Reply) {
+    const user = userEvent.setup();
+    stubApi((path, params) => {
+      if (path === '/alerts') return { status: 200, body: { items: [alertSummary()], total: 1 } };
+      if (path === '/alerts/11') return { status: 200, body: detail };
+      if (path === '/alerts/11/enrich' && enrich) return enrich(params.get('refresh'));
+      return undefined;
+    });
+    renderAt('/alerts');
+    await user.click(await screen.findByRole('button', { name: /SSH brute force/ }));
+    const panel = await screen.findByRole('region', { name: 'Threat intelligence' });
+    return { user, panel };
+  }
+
+  it('shows each indicator with local intel and provider answers', async () => {
+    const { panel } = await openAlert({ ...DETAIL, enrichment: enrichment() });
+
+    // Overall, both indicators, and VirusTotal's answer.
+    expect(within(panel).getAllByText('Malicious')).toHaveLength(4);
+    expect(within(panel).getByText('203.0.113.45')).toBeInTheDocument();
+    expect(within(panel).getByText('seen in source.ip')).toBeInTheDocument();
+    expect(
+      within(panel).getByText('SSH brute-force source reported by several organisations'),
+    ).toBeInTheDocument();
+    expect(within(panel).getByText(/never sent to online providers/)).toBeInTheDocument();
+    expect(within(panel).getByText(MIMIKATZ_SHA256)).toBeInTheDocument();
+    expect(within(panel).getByText('Not in the local indicator store.')).toBeInTheDocument();
+    expect(within(panel).getByText(/52 of 70 engines flag it/)).toBeInTheDocument();
+    expect(within(panel).getByRole('link', { name: 'Open in VirusTotal' })).toHaveAttribute(
+      'href',
+      `https://www.virustotal.com/gui/file/${MIMIKATZ_SHA256}`,
+    );
+  });
+
+  it('says when lookups are waiting on a rate limit', async () => {
+    const postponed = enrichment({ pending: true });
+    const [, hash] = postponed.indicators;
+    if (hash) {
+      hash.providers = [
+        virusTotalAnswer({
+          status: 'rate_limited',
+          verdict: 'unknown',
+          data: {},
+          fetched_at: null,
+        }),
+      ];
+    }
+    const { panel } = await openAlert({ ...DETAIL, enrichment: postponed });
+
+    expect(within(panel).getByText(/rate limit and will be retried/)).toBeInTheDocument();
+    expect(within(panel).getByText('Postponed')).toBeInTheDocument();
+    expect(
+      within(panel).getByText(/retried automatically/, { selector: 'span' }),
+    ).toBeInTheDocument();
+  });
+
+  it('checks an alert that was never enriched, then refreshes it', async () => {
+    const refreshes: (string | null)[] = [];
+    const { user, panel } = await openAlert({ ...DETAIL, enrichment: {} }, (refresh) => {
+      refreshes.push(refresh);
+      return {
+        status: 200,
+        body: enrichment({ online: false, indicators: enrichment().indicators.slice(0, 1) }),
+      };
+    });
+
+    expect(within(panel).getByText('Not checked yet.')).toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: 'Check indicators' }));
+
+    expect(await within(panel).findByText(/local indicators only/)).toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: 'Refresh' }));
+    await vi.waitFor(() => {
+      expect(refreshes).toEqual([null, 'true']);
+    });
+  });
+
+  it('reports a failed check', async () => {
+    const { user, panel } = await openAlert({ ...DETAIL, enrichment: {} }, () => ({
+      status: 404,
+      body: { detail: 'alert not found' },
+    }));
+
+    await user.click(within(panel).getByRole('button', { name: 'Check indicators' }));
+
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('alert not found');
+  });
+
+  it('notes alerts without any indicators', async () => {
+    const { panel } = await openAlert({
+      ...DETAIL,
+      enrichment: enrichment({ verdict: 'unknown', indicators: [] }),
+    });
+
+    expect(within(panel).getByText(/No IP addresses, domains or file hashes/)).toBeInTheDocument();
+    expect(within(panel).getByText('Unknown')).toBeInTheDocument();
   });
 });

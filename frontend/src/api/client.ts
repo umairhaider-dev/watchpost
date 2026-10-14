@@ -81,6 +81,23 @@ export async function apiSend<T>(method: WriteMethod, path: string, body?: unkno
   return (await response.json()) as T;
 }
 
+/** POST a multipart form (small files such as indicator feeds). */
+export async function apiPostForm<T>(path: string, form: FormData): Promise<T> {
+  const response = await fetch(`${API_PREFIX}${path}`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    body: form,
+  });
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      errorDetail(body) ?? `POST ${path} failed with HTTP ${response.status}`,
+    );
+  }
+  return body as T;
+}
+
 export interface UploadOptions {
   parser: string;
   hostName?: string;

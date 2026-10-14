@@ -29,11 +29,23 @@ type Responder = (
   request: StubRequest,
 ) => { status: number; body?: unknown } | undefined;
 
+/** The URL a ``fetch`` call was made with. */
+export function requestUrl(input: RequestInfo | URL | undefined): URL {
+  const raw =
+    input === undefined
+      ? ''
+      : typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+  return new URL(raw, 'http://localhost');
+}
+
 /** Replace ``fetch`` with a stub that answers API paths via ``respond``. */
 export function stubApi(respond: Responder) {
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const url = new URL(raw, 'http://localhost');
+    const url = requestUrl(input);
     const path = url.pathname.replace(/^\/api/, '');
     const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
     const reply = respond(path, url.searchParams, { method: init?.method ?? 'GET', body }) ?? {

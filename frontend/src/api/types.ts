@@ -207,7 +207,7 @@ export interface RuleTestResult {
 
 export interface DetectionRun {
   id: number;
-  trigger: 'ingestion' | 'manual';
+  trigger: 'ingestion' | 'manual' | 'intel';
   status: DetectionStatus;
   ingest_job_id: number | null;
   rule_ids: string[] | null;
@@ -252,7 +252,149 @@ export interface AlertPage {
 }
 
 export interface AlertDetail extends AlertSummary {
-  enrichment: Record<string, unknown>;
+  /** Empty until the alert has been enriched. */
+  enrichment: AlertEnrichment | Record<string, never>;
   rule: { id: string; title: string; description: string; false_positives: string[] } | null;
   evidence: EventRecord[];
+}
+
+// ---------------------------------------------------------------- threat intel
+
+export type IocType = 'ip' | 'domain' | 'md5' | 'sha1' | 'sha256';
+export type Verdict = 'unknown' | 'clean' | 'suspicious' | 'malicious';
+export type LookupStatus = 'ok' | 'not_found' | 'error' | 'rate_limited';
+
+export interface Ioc {
+  id: number;
+  ioc_type: IocType;
+  value: string;
+  source: string;
+  description: string | null;
+  confidence: number | null;
+  tags: string[];
+  is_active: boolean;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  match_count: number;
+  last_matched_at: string | null;
+}
+
+export interface IocPage {
+  items: Ioc[];
+  total: number;
+}
+
+export interface IocMatch {
+  event_id: number;
+  field: string;
+  matched_at: string;
+  timestamp: string;
+  log_source: string;
+  host_name: string | null;
+  source_ip: string | null;
+  user_name: string | null;
+  event_action: string | null;
+  message: string | null;
+}
+
+export interface IocDetail extends Ioc {
+  matches: IocMatch[];
+}
+
+export interface IntelSummary {
+  total: number;
+  active: number;
+  by_type: Partial<Record<IocType, number>>;
+  matched_events: number;
+  indicators_matched: number;
+}
+
+export interface FeedImportResult {
+  filename: string;
+  source: string;
+  indicators: number;
+  created: number;
+  updated: number;
+  duplicates: number;
+  problem_count: number;
+  problems: MalformedSample[];
+  truncated: boolean;
+  sweep_queued: boolean;
+}
+
+export interface ProviderLookup {
+  provider: string;
+  label: string;
+  status: LookupStatus;
+  verdict: Verdict;
+  data: Record<string, unknown>;
+  fetched_at: string | null;
+  cached: boolean;
+}
+
+export interface LookupResult {
+  ioc_type: IocType;
+  value: string;
+  verdict: Verdict;
+  shared: boolean;
+  online: boolean;
+  intel: Ioc[];
+  providers: ProviderLookup[];
+}
+
+export interface ProviderStatus {
+  name: string;
+  label: string;
+  configured: boolean;
+  cooling_down: boolean;
+  remaining: Record<string, number>;
+}
+
+export interface ProvidersInfo {
+  online: boolean;
+  cache_hours: number;
+  providers: ProviderStatus[];
+}
+
+/** A local indicator as summarised on an alert. */
+export interface IntelHit {
+  id: number;
+  type: IocType;
+  value: string;
+  source: string;
+  description: string | null;
+  confidence: number | null;
+  tags: string[];
+}
+
+export interface EnrichedIndicator {
+  type: IocType;
+  value: string;
+  fields: string[];
+  verdict: Verdict;
+  /** Whether the indicator may be sent to online providers. */
+  shared: boolean;
+  intel: IntelHit[];
+  providers: ProviderLookup[];
+}
+
+export interface AlertEnrichment {
+  enriched_at: string;
+  verdict: Verdict;
+  pending: boolean;
+  online: boolean;
+  indicators: EnrichedIndicator[];
+}
+
+export interface EventIndicator {
+  ioc_id: number;
+  ioc_type: IocType;
+  value: string;
+  field: string;
+  source: string;
+  description: string | null;
+  confidence: number | null;
+  tags: string[];
+  is_active: boolean;
 }

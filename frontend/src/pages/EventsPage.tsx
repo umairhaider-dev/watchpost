@@ -1,10 +1,11 @@
 import { Fragment, useId, useState } from 'react';
 
-import { useEvents } from '../api/queries';
+import { useEventIndicators, useEvents } from '../api/queries';
 import type { EventRecord, LogSource } from '../api/types';
 import { Card } from '../components/Card';
 import { PageHeader } from '../components/PageHeader';
 import { formatUtc } from '../lib/format';
+import { IOC_TYPE_LABELS } from '../lib/intel';
 
 const SOURCES: { value: LogSource | ''; label: string }[] = [
   { value: '', label: 'All sources' },
@@ -25,6 +26,27 @@ function summary(event: EventRecord): string {
   return event.message ?? '';
 }
 
+function EventIndicators({ id }: { id: number }) {
+  const indicators = useEventIndicators(id);
+  if (indicators.isPending) return <p className="muted small">Loading matched indicators…</p>;
+  if (indicators.isError) return <p className="text-error small">Could not load indicators.</p>;
+  return (
+    <ul className="context-list">
+      {indicators.data.map((indicator) => (
+        <li key={`${String(indicator.ioc_id)}:${indicator.field}`}>
+          <span className="mono indicator__value">{indicator.value}</span>
+          <span className="badge">{IOC_TYPE_LABELS[indicator.ioc_type]}</span>
+          <span className="muted small">
+            in {indicator.field} · {indicator.source}
+            {indicator.confidence !== null ? ` · confidence ${String(indicator.confidence)}` : ''}
+          </span>
+          {indicator.description ? <span className="small">{indicator.description}</span> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function EventDetails({ event }: { event: EventRecord }) {
   const extras: [string, string | number | null][] = [
     ['Event code', event.event_code],
@@ -43,6 +65,12 @@ function EventDetails({ event }: { event: EventRecord }) {
 
   return (
     <div className="event-details">
+      {event.ioc_matched ? (
+        <>
+          <h3 className="subheading">Threat intel matches</h3>
+          <EventIndicators id={event.id} />
+        </>
+      ) : null}
       <dl className="facts facts--inline">
         {extras
           .filter(
@@ -63,8 +91,9 @@ function EventDetails({ event }: { event: EventRecord }) {
 
 export function EventsPage() {
   const [source, setSource] = useState<LogSource | ''>('');
+  const [iocOnly, setIocOnly] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
-  const events = useEvents(source);
+  const events = useEvents(source, iocOnly);
   const selectId = useId();
   const items = events.data?.pages.flatMap((page) => page.items) ?? [];
 
@@ -78,6 +107,17 @@ export function EventsPage() {
         title="Recent events"
         aside={
           <div className="inline-field">
+            <button
+              type="button"
+              className="chip"
+              aria-pressed={iocOnly}
+              onClick={() => {
+                setIocOnly((current) => !current);
+                setExpanded(null);
+              }}
+            >
+              Threat intel matches
+            </button>
             <label htmlFor={selectId} className="muted small">
               Source
             </label>
@@ -101,7 +141,11 @@ export function EventsPage() {
         {events.isPending ? <p className="muted">Loading events…</p> : null}
         {events.isError ? <p className="text-error">Could not load events.</p> : null}
         {events.isSuccess && items.length === 0 ? (
-          <p className="muted">No events yet. Ingest a log file to see it here.</p>
+          <p className="muted">
+            {iocOnly
+              ? 'No events have matched a threat indicator.'
+              : 'No events yet. Ingest a log file to see it here.'}
+          </p>
         ) : null}
         {items.length > 0 ? (
           <div className="table-wrap">
@@ -136,8 +180,13 @@ export function EventsPage() {
                             <span className="mono">{formatUtc(event.timestamp)}</span>
                           </button>
                         </td>
-                        <td>
+                        <td className="nowrap">
                           <span className="badge">{event.log_source}</span>
+                          {event.ioc_matched ? (
+                            <span className="ioc-flag" title="Matched a threat indicator">
+                              IOC
+                            </span>
+                          ) : null}
                         </td>
                         <td>{event.host_name ?? '—'}</td>
                         <td>{event.user_name ?? '—'}</td>
