@@ -57,3 +57,8 @@ export function formatBucket(iso: string, bucketSeconds: number): string {
   const text = new Date(iso).toISOString();
   return bucketSeconds < 86_400 ? `${text.slice(5, 10)} ${text.slice(11, 16)}` : text.slice(0, 10);
 }
+
+/** "1 event", "2,500 events": a formatted count with the noun in the right number. */
+export function countOf(count: number, noun: string, pluralNoun = `${noun}s`): string {
+  return `${formatNumber(count)} ${count === 1 ? noun : pluralNoun}`;
+}

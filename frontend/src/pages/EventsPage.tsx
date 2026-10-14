@@ -7,6 +7,7 @@ import { Card } from '../components/Card';
 import { EventTable } from '../components/events/EventTable';
 import { PageHeader } from '../components/PageHeader';
 import { TimeRangeSelect } from '../components/TimeRangeSelect';
+import { countOf } from '../lib/format';
 import { isTimeRange, type TimeRange } from '../lib/time';
 
 const SOURCES: { value: LogSource | ''; label: string }[] = [
@@ -175,8 +176,8 @@ export function EventsPage() {
           aside={
             events.data ? (
               <span className="muted">
-                {items.length}
-                {events.hasNextPage ? '+' : ''} events
+                {countOf(items.length, 'event')}
+                {events.hasNextPage ? ' so far' : ''}
               </span>
             ) : null
           }

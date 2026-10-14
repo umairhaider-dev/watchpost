@@ -148,6 +148,8 @@ p {
   padding: 32px 40px;
   max-width: 1280px;
   width: 100%;
+  /* Let wide children (the ATT&CK matrix) scroll inside their card. */
+  min-width: 0;
 }
 
 /* ---------- page header ---------- */
@@ -199,6 +201,7 @@ p {
 }
 
 .card__body {
+  min-width: 0;
   padding: 16px 18px;
   display: flex;
   flex-direction: column;
@@ -507,6 +510,7 @@ input[type='text']:invalid:not(:placeholder-shown) {
 
 .pill {
   display: inline-block;
+  white-space: nowrap;
   padding: 1px 9px;
   border-radius: 999px;
   font-size: 12px;
@@ -656,6 +660,10 @@ input[type='text']:invalid:not(:placeholder-shown) {
   font-size: 18px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+.stat-row dd.small {
+  font-size: 13px;
 }
 
 .facts--inline {

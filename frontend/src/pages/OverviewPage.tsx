@@ -10,7 +10,7 @@ import { EntityLink } from '../components/EntityLink';
 import { PageHeader } from '../components/PageHeader';
 import { PlatformHealth } from '../components/PlatformHealth';
 import { SeverityBadge } from '../components/SeverityBadge';
-import { formatNumber, formatSeconds } from '../lib/format';
+import { countOf, formatNumber, formatSeconds } from '../lib/format';
 
 const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'informational'];
 
@@ -166,7 +166,7 @@ function DashboardCards({ board }: { board: Dashboard }) {
                 ) : null}
               </>
             ),
-            detail: `${formatNumber(ip.events)} events`,
+            detail: countOf(ip.events, 'event'),
           }))}
         />
       </Card>
@@ -178,7 +178,7 @@ function DashboardCards({ board }: { board: Dashboard }) {
             key: user.value,
             value: user.alerts,
             label: <EntityLink kind="user" value={user.value} />,
-            detail: `${formatNumber(user.events)} events`,
+            detail: countOf(user.events, 'event'),
           }))}
         />
       </Card>
@@ -207,8 +207,7 @@ function DashboardCards({ board }: { board: Dashboard }) {
           emptyText="Nothing ingested in this period."
         />
         <p className="muted small">
-          {formatNumber(ingestion.events_ingested)} events stored by {formatNumber(ingestion.jobs)}{' '}
-          {ingestion.jobs === 1 ? 'job' : 'jobs'}
+          {countOf(ingestion.events_ingested, 'event')} stored by {countOf(ingestion.jobs, 'job')}
           {ingestion.events_per_second !== null
             ? `, ${formatNumber(Math.round(ingestion.events_per_second))} events/s on average while running`
             : ''}

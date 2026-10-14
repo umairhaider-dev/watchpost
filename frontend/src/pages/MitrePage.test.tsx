@@ -59,7 +59,7 @@ describe('MitrePage', () => {
     const detected = within(column).getByRole('link', { name: /^T1110\.001:/ });
     expect(detected).toHaveAttribute('href', '/alerts?technique=T1110.001');
     expect(detected).toHaveAccessibleName(
-      'T1110.001: 1 of 1 rules enabled · 3 alerts (1 open) · last 2026-10-12 09:02:51 UTC',
+      'T1110.001: 1 of 1 rule enabled · 3 alerts (1 open) · last 2026-10-12 09:02:51 UTC',
     );
     expect(
       within(column).getByText('Brute Force: Password Spraying').closest('li'),

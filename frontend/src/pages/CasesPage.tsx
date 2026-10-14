@@ -12,7 +12,7 @@ import { Card } from '../components/Card';
 import { PageHeader } from '../components/PageHeader';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { CaseStatusBadge } from '../components/StatusBadges';
-import { formatNumber, formatUtc } from '../lib/format';
+import { countOf, formatNumber, formatUtc } from '../lib/format';
 import { CASE_STATUSES } from '../lib/labels';
 
 const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low', 'informational'];
@@ -208,7 +208,8 @@ export function CasesPage() {
                           {item.title}
                         </Link>
                         <span className="muted small origin">
-                          #{item.id} · {item.note_count} notes · {item.evidence_count} evidence
+                          #{item.id} · {countOf(item.note_count, 'note')} ·{' '}
+                          {countOf(item.evidence_count, 'evidence item')}
                         </span>
                       </td>
                       <td>

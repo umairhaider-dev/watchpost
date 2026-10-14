@@ -14,7 +14,7 @@ import { EnrichmentPanel } from '../components/intel/EnrichmentPanel';
 import { PageHeader } from '../components/PageHeader';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { AlertStatusBadge } from '../components/StatusBadges';
-import { formatNumber, formatUtc } from '../lib/format';
+import { countOf, formatNumber, formatUtc } from '../lib/format';
 import { ALERT_STATUSES } from '../lib/labels';
 import { NotFoundPage } from './NotFoundPage';
 
@@ -256,7 +256,7 @@ export function AlertPage() {
       <div className="stack">
         <Timeline alertId={detail.id} />
         <Card
-          title={`Evidence (${String(detail.evidence.length)} of ${formatNumber(detail.event_count)} events)`}
+          title={`Evidence (${String(detail.evidence.length)} of ${countOf(detail.event_count, 'event')})`}
         >
           {detail.evidence.length ? (
             <EventTable events={detail.evidence} />

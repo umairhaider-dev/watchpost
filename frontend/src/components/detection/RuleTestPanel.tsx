@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 
 import { useIngestInfo, useTestRule } from '../../api/queries';
 import type { RuleTestResult } from '../../api/types';
-import { formatUtc } from '../../lib/format';
+import { countOf, formatUtc } from '../../lib/format';
 import { Card } from '../Card';
 
 /** Matches the API's limit on pasted samples. */
@@ -30,8 +30,8 @@ function TestResults({ result }: { result: RuleTestResult }) {
         <div key={hit.title + hit.first_seen} className="hit">
           <div className="hit__title">{hit.title}</div>
           <div className="muted small">
-            {hit.event_count} events · {formatUtc(hit.first_seen)} → {formatUtc(hit.last_seen)} ·
-            lines {hit.lines.join(', ')}
+            {countOf(hit.event_count, 'event')} · {formatUtc(hit.first_seen)} →{' '}
+            {formatUtc(hit.last_seen)} · lines {hit.lines.join(', ')}
           </div>
         </div>
       ))}

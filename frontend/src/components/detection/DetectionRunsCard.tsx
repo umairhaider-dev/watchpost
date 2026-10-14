@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 
 import { useDetectionRuns, useStartDetectionRun } from '../../api/queries';
 import type { DetectionRun } from '../../api/types';
-import { formatNumber, formatUtc } from '../../lib/format';
+import { countOf, formatUtc } from '../../lib/format';
 import { Card } from '../Card';
 import { JobStatusBadge } from '../JobStatusBadge';
 
@@ -76,7 +76,7 @@ export function DetectionRunsCard() {
                 #{run.id} · {describeScope(run)}
               </span>
               <span className="muted small">
-                {formatNumber(run.events_scanned)} events · {run.alerts_created} new,{' '}
+                {countOf(run.events_scanned, 'event')} · {run.alerts_created} new,{' '}
                 {run.alerts_updated} updated alerts
               </span>
               {run.error ? <span className="text-error small">{run.error}</span> : null}

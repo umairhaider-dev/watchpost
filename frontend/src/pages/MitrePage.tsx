@@ -6,7 +6,7 @@ import type { TechniqueCell } from '../api/types';
 import { Card } from '../components/Card';
 import { PageHeader } from '../components/PageHeader';
 import { TimeRangeSelect } from '../components/TimeRangeSelect';
-import { formatNumber, formatUtc } from '../lib/format';
+import { countOf, formatUtc } from '../lib/format';
 import type { TimeRange } from '../lib/time';
 
 /** How strongly a cell is highlighted: detected, covered only, or neither. */
@@ -18,8 +18,8 @@ function cellState(cell: TechniqueCell): 'detected' | 'covered' | 'uncovered' {
 function Cell({ cell }: { cell: TechniqueCell }) {
   const state = cellState(cell);
   const description = [
-    `${String(cell.enabled_rules)} of ${String(cell.rules.length)} rules enabled`,
-    `${String(cell.alerts)} alerts (${String(cell.open_alerts)} open)`,
+    `${String(cell.enabled_rules)} of ${countOf(cell.rules.length, 'rule')} enabled`,
+    `${countOf(cell.alerts, 'alert')} (${String(cell.open_alerts)} open)`,
     cell.last_seen ? `last ${formatUtc(cell.last_seen)}` : null,
   ]
     .filter(Boolean)
@@ -29,9 +29,7 @@ function Cell({ cell }: { cell: TechniqueCell }) {
       <span className="matrix__id mono">{cell.id}</span>
       <span className="matrix__name">{cell.name ?? 'Unknown technique'}</span>
       <span className="matrix__meta small">
-        {cell.alerts > 0
-          ? `${formatNumber(cell.alerts)} alerts`
-          : `${String(cell.enabled_rules)} rules`}
+        {cell.alerts > 0 ? countOf(cell.alerts, 'alert') : countOf(cell.enabled_rules, 'rule')}
       </span>
     </>
   );

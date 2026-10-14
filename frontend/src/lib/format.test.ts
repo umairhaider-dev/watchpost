@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  countOf,
   formatBucket,
   formatBytes,
   formatDuration,
@@ -71,5 +72,14 @@ describe('formatBucket', () => {
   it('shows the hour for sub-day buckets and the date otherwise', () => {
     expect(formatBucket('2026-10-12T09:00:00Z', 3600)).toBe('10-12 09:00');
     expect(formatBucket('2026-10-12T00:00:00Z', 86_400)).toBe('2026-10-12');
+  });
+});
+
+describe('countOf', () => {
+  it('uses the singular only for one', () => {
+    expect(countOf(1, 'event')).toBe('1 event');
+    expect(countOf(0, 'event')).toBe('0 events');
+    expect(countOf(2500, 'event')).toBe('2,500 events');
+    expect(countOf(2, 'evidence item')).toBe('2 evidence items');
   });
 });

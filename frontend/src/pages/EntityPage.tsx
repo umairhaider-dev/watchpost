@@ -7,7 +7,7 @@ import { EntityLink } from '../components/EntityLink';
 import { PageHeader } from '../components/PageHeader';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { AlertStatusBadge, CaseStatusBadge } from '../components/StatusBadges';
-import { formatNumber, formatUtc } from '../lib/format';
+import { countOf, formatNumber, formatUtc } from '../lib/format';
 import { NotFoundPage } from './NotFoundPage';
 
 const KINDS: Record<EntityKind, string> = { ip: 'IP address', user: 'User', host: 'Host' };
@@ -27,7 +27,7 @@ function ActivityBars({ days }: { days: EntityProfile['activity'] }) {
           key={day.day}
           className="bars__bar"
           style={{ height: `${String(Math.max(4, (day.count / peak) * 100))}%` }}
-          title={`${day.day.slice(0, 10)}: ${String(day.count)} events`}
+          title={`${day.day.slice(0, 10)}: ${countOf(day.count, 'event')}`}
         />
       ))}
     </div>

@@ -1,7 +1,7 @@
 import { type DragEvent, type SubmitEvent, useId, useRef, useState } from 'react';
 
 import { useImportFeed } from '../../api/queries';
-import { formatBytes, formatNumber } from '../../lib/format';
+import { countOf, formatBytes, formatNumber } from '../../lib/format';
 import { Card } from '../Card';
 
 const MAX_FEED_BYTES = 20 * 1024 * 1024;
@@ -164,7 +164,7 @@ export function FeedImportCard() {
       {result ? (
         <div role="status" className="import-result">
           <p className="text-ok">
-            Imported {formatNumber(result.indicators)} indicators from {result.filename}:{' '}
+            Imported {countOf(result.indicators, 'indicator')} from {result.filename}:{' '}
             {formatNumber(result.created)} new, {formatNumber(result.updated)} updated
             {result.duplicates ? `, ${formatNumber(result.duplicates)} duplicate lines` : ''}.
           </p>
