@@ -8,8 +8,8 @@ cases.
 It is a defensive tool only: it reads and analyses logs and never scans, probes or
 modifies other systems.
 
-> **Status:** log ingestion, detection, threat intelligence, alert triage and case
-> management are in place. A metrics dashboard and sign-in with roles come next.
+> **Status:** log ingestion, detection, threat intelligence, alert triage, case
+> management and the dashboard are in place. Sign-in with roles comes next.
 
 ## Architecture
 
@@ -436,6 +436,24 @@ The **ATT&CK matrix** lays out the techniques the rules cover by tactic. Techniq
 that raised alerts in the chosen period are highlighted and link to those alerts, and
 the matrix also shows which techniques have only disabled rules.
 
+## Dashboard
+
+The **Overview** page opens with the security picture for the last 24 hours, 7 days,
+30 days or all time, and refreshes every 30 seconds:
+
+- open, new and unassigned alerts, open cases and stored events
+- alerts over time, stacked by severity, and alerts by severity with how many are open
+- the top attacking IPs (marked when they are in the threat intel store), top targeted
+  users and top triggered rules, each linking to its entity page or alerts
+- the ingestion rate, and the average throughput of ingestion jobs
+- the mean and median time to resolve cases (opened to resolved) and alerts (raised
+  to resolved)
+
+Alerts are counted by when their activity started, so logs imported after the fact
+still chart where the activity happened. The ingestion rate is read from the ingestion
+jobs rather than by scanning events, so the page stays fast as the event table grows.
+Every figure comes from `GET /api/dashboard?range=24h|7d|30d|all`.
+
 ## Data model
 
 | Table | Purpose |
@@ -519,6 +537,7 @@ backend/
     investigation/  alert triage, cases, timelines, entity profiles, ATT&CK matrix, reports
     search/      the event query language: parser and SQL compiler
     accounts.py, audit.py, cli.py   users, the audit trail and the `watchpost` command
+    dashboard.py the overview figures
     api/         FastAPI app factory, middleware, dependencies, routes
     worker/      arq settings, queue and jobs
   alembic/       migrations
