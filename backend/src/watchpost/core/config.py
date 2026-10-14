@@ -67,6 +67,21 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000", "http://localhost:5173"],
     )
 
+    # Sign-in
+    session_hours: int = Field(
+        default=8, ge=1, le=24 * 7, description="How long a sign-in lasts before it expires."
+    )
+    login_max_failures: int = Field(
+        default=5, ge=1, le=100, description="Failed sign-ins allowed per user and per address."
+    )
+    login_window_minutes: int = Field(
+        default=15, ge=1, le=24 * 60, description="Window over which failed sign-ins count."
+    )
+    cookie_secure: bool | None = Field(
+        default=None,
+        description="Send session cookies over HTTPS only. Defaults to on in production.",
+    )
+
     # Detection
     rules_dir: Path = Field(
         default=Path("rules"),
@@ -120,9 +135,11 @@ class Settings(BaseSettings):
     def _normalise_log_level(cls, value: object) -> object:
         return value.upper() if isinstance(value, str) else value
 
-    @field_validator("secret_key", "abuseipdb_api_key", "virustotal_api_key", mode="before")
+    @field_validator(
+        "secret_key", "abuseipdb_api_key", "virustotal_api_key", "cookie_secure", mode="before"
+    )
     @classmethod
-    def _blank_secret_is_unset(cls, value: object) -> object:
+    def _blank_is_unset(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
             return None
         return value
@@ -160,6 +177,11 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """True when running with production hardening enabled."""
         return self.env is Environment.PRODUCTION
+
+    @property
+    def secure_cookies(self) -> bool:
+        """Whether cookies carry the ``Secure`` flag."""
+        return self.cookie_secure if self.cookie_secure is not None else self.is_production
 
     @property
     def secret_key_generated(self) -> bool:
