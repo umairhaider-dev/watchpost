@@ -6,11 +6,13 @@ from watchpost.api.routes import (
     alerts,
     cases,
     detection,
+    entities,
     events,
     health,
     ingest,
     intel,
     meta,
+    mitre,
     rules,
     users,
 )
@@ -24,6 +26,8 @@ api_router.include_router(rules.router)
 api_router.include_router(detection.router)
 api_router.include_router(alerts.router)
 api_router.include_router(cases.router)
+api_router.include_router(entities.router)
+api_router.include_router(mitre.router)
 api_router.include_router(intel.router)
 api_router.include_router(users.router)
 

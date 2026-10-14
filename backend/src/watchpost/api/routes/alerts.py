@@ -5,7 +5,7 @@ from __future__ import annotations
 import ipaddress
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -28,6 +28,7 @@ from watchpost.db.models import (
     alert_events,
 )
 from watchpost.intel.alerts import enrich_alert
+from watchpost.investigation.timeline import DEFAULT_WINDOW, MAX_WINDOW, alert_timeline
 from watchpost.investigation.triage import ReopenConflictError, assign, set_status
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
@@ -118,6 +119,19 @@ class BulkAlertUpdate(AlertUpdate):
     @classmethod
     def _unique(cls, value: list[int]) -> list[int]:
         return list(dict.fromkeys(value))
+
+
+class TimelineEvent(EventOut):
+    is_evidence: bool
+
+
+class TimelineOut(BaseModel):
+    start: datetime
+    end: datetime
+    window_minutes: int
+    entities: dict[str, str]
+    truncated: bool
+    events: list[TimelineEvent]
 
 
 class ConflictOut(BaseModel):
@@ -378,6 +392,38 @@ async def bulk_update(body: BulkAlertUpdate, session: SessionDep, actor: ActorDe
             "these alerts include two open alerts for the same activity; reopen them one by one",
         ) from exc
     return result
+
+
+@router.get("/{alert_id}/timeline", response_model=TimelineOut)
+async def get_timeline(
+    alert_id: int,
+    session: SessionDep,
+    window_minutes: Annotated[
+        int,
+        Query(
+            ge=0,
+            le=int(MAX_WINDOW.total_seconds() // 60),
+            description="How far before and after the alert's activity to look",
+        ),
+    ] = int(DEFAULT_WINDOW.total_seconds() // 60),
+) -> dict[str, Any]:
+    """Events involving the alert's host, IP or user around the time it fired."""
+    alert = await _get_alert(session, alert_id)
+    timeline = await alert_timeline(session, alert, timedelta(minutes=window_minutes))
+    return {
+        "start": timeline.start,
+        "end": timeline.end,
+        "window_minutes": window_minutes,
+        "entities": timeline.entities,
+        "truncated": timeline.truncated,
+        "events": [
+            {
+                **EventOut.model_validate(event).model_dump(),
+                "is_evidence": event.id in timeline.evidence_ids,
+            }
+            for event in timeline.events
+        ],
+    }
 
 
 @router.post("/{alert_id}/enrich", response_model=dict[str, Any])

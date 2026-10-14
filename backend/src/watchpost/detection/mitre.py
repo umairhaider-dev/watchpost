@@ -55,6 +55,39 @@ TECHNIQUES: dict[str, str] = {
 }
 
 
+# The tactics each technique above serves, as listed in ATT&CK.
+TECHNIQUE_TACTICS: dict[str, tuple[str, ...]] = {
+    "T1003.001": ("TA0006",),
+    "T1003.008": ("TA0006",),
+    "T1021.004": ("TA0008",),
+    "T1027": ("TA0005",),
+    "T1053.005": ("TA0002", "TA0003", "TA0004"),
+    "T1059.001": ("TA0002",),
+    "T1070.001": ("TA0005",),
+    "T1078": ("TA0001", "TA0003", "TA0004", "TA0005"),
+    "T1083": ("TA0007",),
+    "T1098": ("TA0003", "TA0004"),
+    "T1110": ("TA0006",),
+    "T1110.001": ("TA0006",),
+    "T1110.003": ("TA0006",),
+    "T1136.001": ("TA0003",),
+    "T1190": ("TA0001",),
+    "T1204.002": ("TA0002",),
+    "T1547.001": ("TA0003", "TA0004"),
+    "T1548.003": ("TA0004", "TA0005"),
+    "T1566.001": ("TA0001",),
+    "T1595.002": ("TA0043",),
+    "T1595.003": ("TA0043",),
+}
+
+
 def technique_name(technique_id: str) -> str | None:
     """Name of a technique, falling back to its parent for unknown sub-techniques."""
     return TECHNIQUES.get(technique_id) or TECHNIQUES.get(technique_id.split(".", 1)[0])
+
+
+def technique_tactics(technique_id: str) -> tuple[str, ...]:
+    """Tactics of a technique (or its parent), empty when it is not in the reference data."""
+    return TECHNIQUE_TACTICS.get(technique_id) or TECHNIQUE_TACTICS.get(
+        technique_id.split(".", 1)[0], ()
+    )
