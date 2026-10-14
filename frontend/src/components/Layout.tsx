@@ -5,10 +5,12 @@ import { useHealth } from '../api/queries';
 const NAV_ITEMS = [
   { to: '/', label: 'Overview', end: true },
   { to: '/alerts', label: 'Alerts', end: false },
+  { to: '/cases', label: 'Cases', end: false },
+  { to: '/events', label: 'Event search', end: false },
+  { to: '/mitre', label: 'ATT&CK matrix', end: false },
   { to: '/rules', label: 'Rules', end: false },
   { to: '/intel', label: 'Threat intel', end: false },
   { to: '/ingest', label: 'Ingest', end: false },
-  { to: '/events', label: 'Events', end: false },
   { to: '/schema', label: 'Event schema', end: false },
 ] as const;
 

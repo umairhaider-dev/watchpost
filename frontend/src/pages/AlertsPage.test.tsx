@@ -2,222 +2,179 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { AlertDetail } from '../api/types';
-import { alertSummary, enrichment, MIMIKATZ_SHA256, virusTotalAnswer } from '../test/fixtures';
-import { renderAt, stubApi } from '../test/utils';
-
-type Reply = { status: number; body?: unknown } | undefined;
+import { alertSummary, analyst, caseDetail, caseSummary } from '../test/fixtures';
+import { renderAt, requestUrl, type StubRequest, stubApi } from '../test/utils';
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const DETAIL: AlertDetail = {
-  ...alertSummary(),
-  enrichment: {},
-  rule: {
-    id: 'ssh-brute-force',
-    title: 'SSH brute force',
-    description: 'Many failed SSH logins from one address.',
-    false_positives: [],
-  },
-  evidence: [
-    {
-      id: 1,
-      timestamp: '2026-10-12T09:02:13Z',
-      ingested_at: '2026-10-13T08:00:00Z',
-      log_source: 'linux_auth',
-      host_name: 'web-01',
-      source_ip: '203.0.113.45',
-      source_port: 40112,
-      destination_ip: null,
-      destination_port: null,
-      user_name: 'root',
-      event_category: 'authentication',
-      event_action: 'ssh_login',
-      event_outcome: 'failure',
-      event_code: null,
-      process_name: 'sshd',
-      process_pid: 3104,
-      process_executable: null,
-      process_command_line: null,
-      process_parent_name: null,
-      process_parent_pid: null,
-      url_original: null,
-      http_method: null,
-      http_status_code: null,
-      user_agent: null,
-      message: 'Failed password for root from 203.0.113.45',
-      ioc_matched: false,
-      raw_event: { line: 'raw' },
-    },
-  ],
-};
+type Reply = { status: number; body?: unknown } | undefined;
 
-describe('AlertsPage', () => {
-  it('lists alerts and expands one to show its evidence', async () => {
-    const user = userEvent.setup();
-    stubApi((path) => {
-      if (path === '/alerts') return { status: 200, body: { items: [alertSummary()], total: 1 } };
-      if (path === '/alerts/11') return { status: 200, body: DETAIL };
-      return undefined;
-    });
-    renderAt('/alerts');
-
-    const toggle = await screen.findByRole('button', { name: /SSH brute force: 203\.0\.113\.45/ });
-    expect(screen.getByText('web-01 · root · 203.0.113.45')).toBeInTheDocument();
-    expect(screen.getByText('Medium')).toBeInTheDocument();
-
-    await user.click(toggle);
-
-    expect(await screen.findByText('Evidence (1 of 10 events)')).toBeInTheDocument();
-    expect(screen.getByText('Failed password for root from 203.0.113.45')).toBeInTheDocument();
-    expect(screen.getByText('Many failed SSH logins from one address.')).toBeInTheDocument();
-  });
-
-  it('sends severity, status and rule filters to the API', async () => {
-    const user = userEvent.setup();
-    const fetchMock = stubApi((path) =>
-      path === '/alerts' ? { status: 200, body: { items: [], total: 0 } } : undefined,
-    );
-    renderAt('/alerts?rule=ssh-brute-force');
-    expect(await screen.findByText('No alerts match these filters.')).toBeInTheDocument();
-    expect(screen.getByText('Alerts from ssh-brute-force')).toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: 'critical' }));
-    await user.click(screen.getByRole('button', { name: 'high' }));
-    await user.selectOptions(screen.getByLabelText('Status'), 'new');
-
-    const urls = fetchMock.mock.calls.map(([input]) =>
-      typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
-    );
-    const last = new URL(urls.at(-1) ?? '', 'http://localhost');
-    expect(last.searchParams.getAll('severity')).toEqual(['critical', 'high']);
-    expect(last.searchParams.get('status')).toBe('new');
-    expect(last.searchParams.get('rule_id')).toBe('ssh-brute-force');
-    expect(screen.getByRole('button', { name: 'critical' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-
-    await user.click(screen.getByRole('button', { name: 'critical' }));
-    expect(screen.getByRole('button', { name: 'critical' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
-  });
-
-  it('reports errors loading alert details', async () => {
-    const user = userEvent.setup();
-    stubApi((path) =>
-      path === '/alerts'
-        ? { status: 200, body: { items: [alertSummary()], total: 1 } }
-        : { status: 500, body: {} },
-    );
-    renderAt('/alerts');
-
-    await user.click(await screen.findByRole('button', { name: /SSH brute force/ }));
-
-    expect(await screen.findByText('Could not load this alert.')).toBeInTheDocument();
-  });
-});
-
-describe('AlertsPage threat intelligence', () => {
-  /** Open the alert's details; ``enrich`` answers POST /alerts/11/enrich (given ?refresh). */
-  async function openAlert(detail: AlertDetail, enrich?: (refresh: string | null) => Reply) {
-    const user = userEvent.setup();
-    stubApi((path, params) => {
-      if (path === '/alerts') return { status: 200, body: { items: [alertSummary()], total: 1 } };
-      if (path === '/alerts/11') return { status: 200, body: detail };
-      if (path === '/alerts/11/enrich' && enrich) return enrich(params.get('refresh'));
-      return undefined;
-    });
-    renderAt('/alerts');
-    await user.click(await screen.findByRole('button', { name: /SSH brute force/ }));
-    const panel = await screen.findByRole('region', { name: 'Threat intelligence' });
-    return { user, panel };
-  }
-
-  it('shows each indicator with local intel and provider answers', async () => {
-    const { panel } = await openAlert({ ...DETAIL, enrichment: enrichment() });
-
-    // Overall, both indicators, and VirusTotal's answer.
-    expect(within(panel).getAllByText('Malicious')).toHaveLength(4);
-    expect(within(panel).getByText('203.0.113.45')).toBeInTheDocument();
-    expect(within(panel).getByText('seen in source.ip')).toBeInTheDocument();
-    expect(
-      within(panel).getByText('SSH brute-force source reported by several organisations'),
-    ).toBeInTheDocument();
-    expect(within(panel).getByText(/never sent to online providers/)).toBeInTheDocument();
-    expect(within(panel).getByText(MIMIKATZ_SHA256)).toBeInTheDocument();
-    expect(within(panel).getByText('Not in the local indicator store.')).toBeInTheDocument();
-    expect(within(panel).getByText(/52 of 70 engines flag it/)).toBeInTheDocument();
-    expect(within(panel).getByRole('link', { name: 'Open in VirusTotal' })).toHaveAttribute(
-      'href',
-      `https://www.virustotal.com/gui/file/${MIMIKATZ_SHA256}`,
-    );
-  });
-
-  it('says when lookups are waiting on a rate limit', async () => {
-    const postponed = enrichment({ pending: true });
-    const [, hash] = postponed.indicators;
-    if (hash) {
-      hash.providers = [
-        virusTotalAnswer({
-          status: 'rate_limited',
-          verdict: 'unknown',
-          data: {},
-          fetched_at: null,
-        }),
-      ];
-    }
-    const { panel } = await openAlert({ ...DETAIL, enrichment: postponed });
-
-    expect(within(panel).getByText(/rate limit and will be retried/)).toBeInTheDocument();
-    expect(within(panel).getByText('Postponed')).toBeInTheDocument();
-    expect(
-      within(panel).getByText(/retried automatically/, { selector: 'span' }),
-    ).toBeInTheDocument();
-  });
-
-  it('checks an alert that was never enriched, then refreshes it', async () => {
-    const refreshes: (string | null)[] = [];
-    const { user, panel } = await openAlert({ ...DETAIL, enrichment: {} }, (refresh) => {
-      refreshes.push(refresh);
+function stubQueue(extra: (path: string, request: StubRequest) => Reply = () => undefined) {
+  return stubApi((path, _params, request) => {
+    const special = extra(path, request);
+    if (special) return special;
+    if (path === '/alerts') {
       return {
         status: 200,
-        body: enrichment({ online: false, indicators: enrichment().indicators.slice(0, 1) }),
+        body: {
+          items: [
+            alertSummary(),
+            alertSummary({
+              id: 12,
+              title: 'LSASS process memory accessed',
+              severity: 'critical',
+              host_name: 'ws-fin-07',
+              source_ip: null,
+              user_name: 'carol',
+              assignee_id: 3,
+              case_id: 7,
+            }),
+          ],
+          total: 2,
+        },
+      };
+    }
+    if (path === '/users') return { status: 200, body: [analyst()] };
+    if (path === '/cases') return { status: 200, body: { items: [caseSummary()], total: 1 } };
+    return undefined;
+  });
+}
+
+function lastAlertQuery(fetchMock: ReturnType<typeof stubApi>): URLSearchParams {
+  const urls = fetchMock.mock.calls
+    .map(([input]) => requestUrl(input))
+    .filter((url) => url.pathname === '/api/alerts');
+  return urls.at(-1)?.searchParams ?? new URLSearchParams();
+}
+
+describe('AlertsPage', () => {
+  it('lists alerts with entity links, owners and cases', async () => {
+    stubQueue();
+    renderAt('/alerts');
+
+    const link = await screen.findByRole('link', { name: 'SSH brute force: 203.0.113.45' });
+    expect(link).toHaveAttribute('href', '/alerts/11');
+    expect(screen.getByRole('link', { name: 'ws-fin-07' })).toHaveAttribute(
+      'href',
+      '/entities/host?value=ws-fin-07',
+    );
+    expect(screen.getByRole('link', { name: '203.0.113.45' })).toHaveAttribute(
+      'href',
+      '/entities/ip?value=203.0.113.45',
+    );
+    expect(await screen.findByRole('cell', { name: 'analyst.one' })).toBeInTheDocument();
+    expect(screen.getByText(/#12 · T1110\.001 · case #7/)).toBeInTheDocument();
+    expect(screen.getByText('Alert queue').nextSibling).toHaveTextContent('2');
+  });
+
+  it('sends every filter to the API', async () => {
+    const user = userEvent.setup();
+    const fetchMock = stubQueue();
+    renderAt('/alerts?rule=ssh-brute-force&technique=T1110.001');
+    await screen.findByText('Alerts from ssh-brute-force');
+
+    await user.click(screen.getByRole('button', { name: 'critical' }));
+    await user.click(screen.getByRole('button', { name: 'New' }));
+    await user.type(screen.getByLabelText('Host'), 'web-01');
+    await user.type(screen.getByLabelText('Source IP'), '203.0.113.45');
+    await user.click(screen.getByRole('button', { name: 'Apply' }));
+    await user.selectOptions(screen.getByLabelText('Active in'), '24h');
+    await user.selectOptions(screen.getByLabelText('Assignee'), 'none');
+    await user.selectOptions(screen.getByLabelText('Sort by'), 'severity');
+
+    const params = lastAlertQuery(fetchMock);
+    expect(params.getAll('severity')).toEqual(['critical']);
+    expect(params.getAll('status')).toEqual(['new']);
+    expect(params.get('rule_id')).toBe('ssh-brute-force');
+    expect(params.get('technique')).toBe('T1110.001');
+    expect(params.get('host')).toBe('web-01');
+    expect(params.get('source_ip')).toBe('203.0.113.45');
+    expect(params.get('unassigned')).toBe('true');
+    expect(params.get('sort')).toBe('severity');
+    const since = Date.parse(params.get('since') ?? '');
+    expect(Date.now() - since).toBeGreaterThan(23 * 3_600_000);
+
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+    const cleared = lastAlertQuery(fetchMock);
+    expect(cleared.get('rule_id')).toBeNull();
+    expect(cleared.getAll('severity')).toEqual([]);
+    expect(screen.getByLabelText('Host')).toHaveValue('');
+  });
+
+  it('updates the status of selected alerts in bulk', async () => {
+    const user = userEvent.setup();
+    const sent: unknown[] = [];
+    stubQueue((path, request) => {
+      if (path !== '/alerts/bulk') return undefined;
+      sent.push(request.body);
+      return {
+        status: 200,
+        body: {
+          updated: [11],
+          unchanged: [],
+          missing: [],
+          conflicts: [{ alert_id: 12, open_alert_id: 30 }],
+        },
       };
     });
+    renderAt('/alerts');
 
-    expect(within(panel).getByText('Not checked yet.')).toBeInTheDocument();
-    await user.click(within(panel).getByRole('button', { name: 'Check indicators' }));
+    await user.click(await screen.findByLabelText('Select all alerts'));
+    const bar = screen.getByLabelText('Bulk actions');
+    expect(within(bar).getByText('2 selected')).toBeInTheDocument();
+    await user.selectOptions(within(bar).getByLabelText('Set status'), 'false_positive');
+    await user.click(within(bar).getByRole('button', { name: 'Apply' }));
 
-    expect(await within(panel).findByText(/local indicators only/)).toBeInTheDocument();
-    await user.click(within(panel).getByRole('button', { name: 'Refresh' }));
-    await vi.waitFor(() => {
-      expect(refreshes).toEqual([null, 'true']);
-    });
+    expect(sent).toEqual([{ alert_ids: [11, 12], status: 'false_positive' }]);
+    expect(screen.queryByLabelText('Bulk actions')).not.toBeInTheDocument();
   });
 
-  it('reports a failed check', async () => {
-    const { user, panel } = await openAlert({ ...DETAIL, enrichment: {} }, () => ({
-      status: 404,
-      body: { detail: 'alert not found' },
-    }));
+  it('opens a case from selected alerts', async () => {
+    const user = userEvent.setup();
+    const sent: unknown[] = [];
+    stubQueue((path, request) => {
+      if (path === '/cases' && request.method === 'POST') {
+        sent.push(request.body);
+        return { status: 201, body: caseDetail({ id: 9 }) };
+      }
+      return undefined;
+    });
+    renderAt('/alerts');
 
-    await user.click(within(panel).getByRole('button', { name: 'Check indicators' }));
+    await user.click(await screen.findByLabelText('Select alert 11'));
+    const form = screen.getByRole('form', { name: 'Add to case' });
+    await user.type(within(form).getByLabelText('Title'), 'Brute force on web-01');
+    await user.click(within(form).getByRole('button', { name: 'Open case' }));
 
-    expect(await within(panel).findByRole('alert')).toHaveTextContent('alert not found');
+    expect(sent).toEqual([{ title: 'Brute force on web-01', alert_ids: [11] }]);
   });
 
-  it('notes alerts without any indicators', async () => {
-    const { panel } = await openAlert({
-      ...DETAIL,
-      enrichment: enrichment({ verdict: 'unknown', indicators: [] }),
+  it('adds selected alerts to an existing case', async () => {
+    const user = userEvent.setup();
+    const sent: StubRequest[] = [];
+    stubQueue((path, request) => {
+      if (path === '/cases/7/alerts') {
+        sent.push(request);
+        return { status: 200, body: { added: [11] } };
+      }
+      return undefined;
     });
+    renderAt('/alerts');
 
-    expect(within(panel).getByText(/No IP addresses, domains or file hashes/)).toBeInTheDocument();
-    expect(within(panel).getByText('Unknown')).toBeInTheDocument();
+    await user.click(await screen.findByLabelText('Select alert 11'));
+    const form = screen.getByRole('form', { name: 'Add to case' });
+    await user.selectOptions(within(form).getByLabelText('Case'), '7');
+    await user.click(within(form).getByRole('button', { name: 'Add to case' }));
+
+    expect(sent.map((request) => request.body)).toEqual([{ alert_ids: [11] }]);
+  });
+
+  it('says when nothing matches or loading fails', async () => {
+    stubApi((path) => (path === '/alerts' ? { status: 500, body: { detail: 'boom' } } : undefined));
+    renderAt('/alerts');
+
+    expect(await screen.findByText('Could not load alerts.')).toBeInTheDocument();
   });
 });

@@ -242,6 +242,8 @@ export interface AlertSummary {
   mitre_tactics: string[];
   mitre_techniques: string[];
   case_id: number | null;
+  assignee_id: number | null;
+  resolved_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -256,6 +258,36 @@ export interface AlertDetail extends AlertSummary {
   enrichment: AlertEnrichment | Record<string, never>;
   rule: { id: string; title: string; description: string; false_positives: string[] } | null;
   evidence: EventRecord[];
+  activity: Activity[];
+}
+
+/** One audit entry about an alert or a case. */
+export interface Activity {
+  id: number;
+  occurred_at: string;
+  username: string | null;
+  action: string;
+  details: Record<string, unknown>;
+}
+
+export interface BulkAlertResult {
+  updated: number[];
+  unchanged: number[];
+  missing: number[];
+  conflicts: { alert_id: number; open_alert_id: number }[];
+}
+
+export interface TimelineEvent extends EventRecord {
+  is_evidence: boolean;
+}
+
+export interface AlertTimeline {
+  start: string;
+  end: string;
+  window_minutes: number;
+  entities: Record<string, string>;
+  truncated: boolean;
+  events: TimelineEvent[];
 }
 
 // ---------------------------------------------------------------- threat intel
@@ -397,4 +429,119 @@ export interface EventIndicator {
   confidence: number | null;
   tags: string[];
   is_active: boolean;
+}
+
+// ---------------------------------------------------------------- users
+
+export type UserRole = 'admin' | 'analyst' | 'viewer';
+
+export interface User {
+  id: number;
+  username: string;
+  full_name: string | null;
+  role: UserRole;
+  is_active: boolean;
+}
+
+// ---------------------------------------------------------------- cases
+
+export type CaseStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+
+export interface CaseSummary {
+  id: number;
+  title: string;
+  severity: Severity;
+  status: CaseStatus;
+  assignee_id: number | null;
+  created_by_id: number | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+  closed_at: string | null;
+  alert_count: number;
+  open_alert_count: number;
+  note_count: number;
+  evidence_count: number;
+}
+
+export interface CasePage {
+  items: CaseSummary[];
+  total: number;
+}
+
+export interface CaseNote {
+  id: number;
+  body: string;
+  author: string | null;
+  created_at: string;
+}
+
+export interface CaseEvidence {
+  id: number;
+  note: string | null;
+  added_by: string | null;
+  created_at: string;
+  event: EventRecord;
+}
+
+export interface UserRef {
+  id: number;
+  username: string;
+  full_name: string | null;
+}
+
+export interface CaseDetail extends CaseSummary {
+  description: string;
+  resolution: string | null;
+  assignee: UserRef | null;
+  created_by: UserRef | null;
+  alerts: AlertSummary[];
+  notes: CaseNote[];
+  evidence: CaseEvidence[];
+  activity: Activity[];
+  tactics: string[];
+  techniques: string[];
+  entities: { hosts: string[]; ips: string[]; users: string[] };
+}
+
+// ---------------------------------------------------------------- investigation
+
+export type EntityKind = 'ip' | 'user' | 'host';
+
+export interface Counted {
+  value: string;
+  count: number;
+}
+
+export interface EntityProfile {
+  kind: EntityKind;
+  value: string;
+  query: string;
+  event_count: number;
+  first_seen: string | null;
+  last_seen: string | null;
+  log_sources: Counted[];
+  activity: { day: string; count: number }[];
+  related: Partial<Record<'users' | 'hosts' | 'ips', Counted[]>>;
+  alert_count: number;
+  open_alert_count: number;
+  alerts: AlertSummary[];
+  cases: CaseSummary[];
+  intel: Ioc[];
+}
+
+export interface TechniqueCell {
+  id: string;
+  name: string | null;
+  rules: string[];
+  enabled_rules: number;
+  alerts: number;
+  open_alerts: number;
+  last_seen: string | null;
+}
+
+export interface AttackMatrix {
+  tactics: { id: string; name: string; techniques: TechniqueCell[] }[];
+  techniques_covered: number;
+  techniques_detected: number;
 }

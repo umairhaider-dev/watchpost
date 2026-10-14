@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { rangeStart, type TimeRange } from '../lib/time';
 import { apiGet, apiPostForm, apiSend } from './client';
 import type {
   AlertDetail,
@@ -38,8 +39,7 @@ export const queryKeys = {
   ingestInfo: ['ingest', 'info'] as const,
   ingestJobs: ['ingest', 'jobs'] as const,
   ingestJob: (id: number) => ['ingest', 'jobs', id] as const,
-  events: (logSource: LogSource | '', iocOnly: boolean) =>
-    ['events', 'list', logSource, iocOnly] as const,
+  events: (search: EventSearch) => ['events', 'list', search] as const,
   eventIndicators: (id: number) => ['events', 'indicators', id] as const,
   rules: ['rules'] as const,
   rule: (id: string) => ['rules', id] as const,
@@ -59,10 +59,62 @@ export interface IocFilters {
   matchedOnly: boolean;
 }
 
+export type AlertSort = 'last_seen' | 'first_seen' | 'severity';
+
 export interface AlertFilters {
   severity: Severity[];
-  status: AlertStatus | '';
+  status: AlertStatus[];
   ruleId: string;
+  host: string;
+  sourceIp: string;
+  user: string;
+  technique: string;
+  /** '' for anyone, 'none' for unassigned, otherwise a user ID. */
+  assignee: string;
+  range: TimeRange;
+  sort: AlertSort;
+}
+
+export const DEFAULT_ALERT_FILTERS: AlertFilters = {
+  severity: [],
+  status: [],
+  ruleId: '',
+  host: '',
+  sourceIp: '',
+  user: '',
+  technique: '',
+  assignee: '',
+  range: 'all',
+  sort: 'last_seen',
+};
+
+export interface EventSearch {
+  q: string;
+  range: TimeRange;
+  logSource: LogSource | '';
+  iocOnly: boolean;
+}
+
+/** Query string for the alert list API. */
+function alertParams(filters: AlertFilters, now: number = Date.now()): URLSearchParams {
+  const params = new URLSearchParams({ limit: '100', sort: filters.sort });
+  for (const severity of filters.severity) params.append('severity', severity);
+  for (const status of filters.status) params.append('status', status);
+  const text: [string, string][] = [
+    ['rule_id', filters.ruleId],
+    ['host', filters.host],
+    ['source_ip', filters.sourceIp],
+    ['user', filters.user],
+    ['technique', filters.technique],
+  ];
+  for (const [key, value] of text) {
+    if (value.trim()) params.set(key, value.trim());
+  }
+  if (filters.assignee === 'none') params.set('unassigned', 'true');
+  else if (filters.assignee) params.set('assignee_id', filters.assignee);
+  const since = rangeStart(filters.range, now);
+  if (since) params.set('since', since);
+  return params;
 }
 
 const ACTIVE_POLL_MS = 2_000;
@@ -127,16 +179,19 @@ export function useIngestionJob(id: number) {
   });
 }
 
-export function useEvents(logSource: LogSource | '', iocOnly = false) {
+/** Event search, newest first, loaded a page at a time. */
+export function useEventSearch(search: EventSearch) {
   return useInfiniteQuery({
-    queryKey: queryKeys.events(logSource, iocOnly),
+    queryKey: queryKeys.events(search),
     queryFn: ({ signal, pageParam }) =>
       apiGet<EventPage>('/events', {
         signal,
         params: {
           limit: 100,
-          log_source: logSource || undefined,
-          ioc_matched: iocOnly ? 'true' : undefined,
+          q: search.q.trim() || undefined,
+          start: rangeStart(search.range),
+          log_source: search.logSource || undefined,
+          ioc_matched: search.iocOnly ? 'true' : undefined,
           cursor: pageParam,
         },
       }),
@@ -237,21 +292,17 @@ export function useStartDetectionRun() {
 export function useAlerts(filters: AlertFilters) {
   return useQuery({
     queryKey: queryKeys.alerts(filters),
-    queryFn: ({ signal }) => {
-      const params = new URLSearchParams({ limit: '100' });
-      for (const severity of filters.severity) params.append('severity', severity);
-      if (filters.status) params.set('status', filters.status);
-      if (filters.ruleId) params.set('rule_id', filters.ruleId);
-      return apiGet<AlertPage>(`/alerts?${params.toString()}`, { signal });
-    },
+    queryFn: ({ signal }) =>
+      apiGet<AlertPage>(`/alerts?${alertParams(filters).toString()}`, { signal }),
     refetchInterval: IDLE_POLL_MS,
   });
 }
 
-export function useAlert(id: number) {
+export function useAlert(id: number, enabled = true) {
   return useQuery({
     queryKey: queryKeys.alert(id),
     queryFn: ({ signal }) => apiGet<AlertDetail>(`/alerts/${String(id)}`, { signal }),
+    enabled,
   });
 }
 

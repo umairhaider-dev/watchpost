@@ -44,6 +44,18 @@ describe('Layout', () => {
     expect(screen.getByRole('link', { name: 'Threat intel' })).toHaveClass('active');
   });
 
+  it('links to cases and the ATT&CK matrix', async () => {
+    stubApi(() => undefined);
+    const user = userEvent.setup();
+
+    renderAt('/');
+    await user.click(screen.getByRole('link', { name: 'Cases' }));
+    expect(await screen.findByRole('heading', { name: 'Cases', level: 1 })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('link', { name: 'ATT&CK matrix' }));
+    expect(await screen.findByRole('heading', { name: 'MITRE ATT&CK' })).toBeInTheDocument();
+  });
+
   it('renders a not-found page for unknown routes', async () => {
     stubApi(() => undefined);
 

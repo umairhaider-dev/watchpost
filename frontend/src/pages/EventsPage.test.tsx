@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { EventRecord } from '../api/types';
-import { renderAt, requestUrl, stubApi } from '../test/utils';
+import { caseSummary } from '../test/fixtures';
+import { renderAt, requestUrl, type StubRequest, stubApi } from '../test/utils';
 
 function event(id: number, overrides: Partial<EventRecord> = {}): EventRecord {
   return {
@@ -199,8 +200,108 @@ describe('EventsPage threat intel matches', () => {
 
     await user.click(screen.getByRole('button', { name: 'Threat intel matches' }));
 
-    expect(
-      await screen.findByText('No events have matched a threat indicator.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('No events match this search.')).toBeInTheDocument();
+  });
+});
+
+describe('EventsPage search', () => {
+  function lastSearch(fetchMock: ReturnType<typeof stubApi>): URLSearchParams {
+    const urls = fetchMock.mock.calls
+      .map(([input]) => requestUrl(input))
+      .filter((url) => url.pathname === '/api/events');
+    return urls.at(-1)?.searchParams ?? new URLSearchParams();
+  }
+
+  it('runs a query and a time range from the search box', async () => {
+    const user = userEvent.setup();
+    const fetchMock = stubApi((path) =>
+      path === '/events'
+        ? { status: 200, body: { items: [event(1)], next_cursor: null } }
+        : undefined,
+    );
+    renderAt('/events');
+    await screen.findByRole('button', { name: /2026-10-12/ });
+
+    await user.type(screen.getByLabelText('Query'), 'user.name:root AND event.outcome:failure');
+    await user.click(screen.getByRole('button', { name: 'Search' }));
+    await user.selectOptions(screen.getByLabelText('Time range'), '7d');
+
+    await vi.waitFor(() => {
+      expect(lastSearch(fetchMock).get('q')).toBe('user.name:root AND event.outcome:failure');
+    });
+    const start = Date.parse(lastSearch(fetchMock).get('start') ?? '');
+    expect(Date.now() - start).toBeGreaterThan(6 * 24 * 3_600_000);
+  });
+
+  it('takes the query from the address, as entity pages link to it', async () => {
+    const fetchMock = stubApi((path) =>
+      path === '/events'
+        ? { status: 200, body: { items: [event(1)], next_cursor: null } }
+        : undefined,
+    );
+    renderAt('/events?q=ip%3A203.0.113.45&range=24h');
+
+    expect(await screen.findByLabelText('Query')).toHaveValue('ip:203.0.113.45');
+    expect(screen.getByLabelText('Time range')).toHaveValue('24h');
+    expect(lastSearch(fetchMock).get('q')).toBe('ip:203.0.113.45');
+    expect(await screen.findByRole('link', { name: 'web-01' })).toHaveAttribute(
+      'href',
+      '/entities/host?value=web-01',
+    );
+  });
+
+  it('shows query errors from the API', async () => {
+    stubApi((path) =>
+      path === '/events'
+        ? {
+            status: 422,
+            body: { detail: "unknown field 'hostname'; did you mean host.name? (at character 1)" },
+          }
+        : undefined,
+    );
+    renderAt('/events?q=hostname%3Ax');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('did you mean host.name?');
+  });
+
+  it('pins an event to a case as evidence', async () => {
+    const user = userEvent.setup();
+    const pinned: StubRequest[] = [];
+    stubApi((path, _params, request) => {
+      if (path === '/events')
+        return { status: 200, body: { items: [event(5)], next_cursor: null } };
+      if (path === '/cases') return { status: 200, body: { items: [caseSummary()], total: 1 } };
+      if (path === '/cases/7/evidence') {
+        pinned.push(request);
+        return { status: 201, body: {} };
+      }
+      return undefined;
+    });
+    renderAt('/events');
+
+    await user.click(await screen.findByRole('button', { name: /2026-10-12/ }));
+    const form = await screen.findByRole('form', { name: 'Pin as evidence' });
+    await within(form).findByRole('option', { name: '#7 SSH brute force on web-01' });
+    await user.selectOptions(within(form).getByLabelText('Case'), '7');
+    await user.type(within(form).getByLabelText('Note'), 'First failure');
+    await user.click(within(form).getByRole('button', { name: 'Pin as evidence' }));
+
+    expect(await within(form).findByRole('status')).toHaveTextContent('Pinned to case #7');
+    expect(pinned.map((request) => request.body)).toEqual([{ event_id: 5, note: 'First failure' }]);
+  });
+
+  it('points to the cases page when no case is open', async () => {
+    const user = userEvent.setup();
+    stubApi((path) => {
+      if (path === '/events')
+        return { status: 200, body: { items: [event(5)], next_cursor: null } };
+      if (path === '/cases') return { status: 200, body: { items: [], total: 0 } };
+      return undefined;
+    });
+    renderAt('/events');
+
+    await user.click(await screen.findByRole('button', { name: /2026-10-12/ }));
+
+    expect(await screen.findByText(/to pin this event as evidence/)).toBeInTheDocument();
   });
 });

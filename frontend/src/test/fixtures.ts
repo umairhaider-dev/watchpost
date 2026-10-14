@@ -1,11 +1,16 @@
 import type {
+  AlertDetail,
   AlertEnrichment,
   AlertSummary,
+  CaseDetail,
+  CaseSummary,
   DetectionRun,
+  EventRecord,
   Ioc,
   ProviderLookup,
   RuleDetail,
   RuleSummary,
+  User,
 } from '../api/types';
 
 export function ruleSummary(overrides: Partial<RuleSummary> = {}): RuleSummary {
@@ -94,6 +99,8 @@ export function alertSummary(overrides: Partial<AlertSummary> = {}): AlertSummar
     mitre_tactics: ['TA0006'],
     mitre_techniques: ['T1110.001'],
     case_id: null,
+    assignee_id: null,
+    resolved_at: null,
     created_at: '2026-10-12T09:05:00Z',
     updated_at: '2026-10-12T09:05:00Z',
     ...overrides,
@@ -178,6 +185,104 @@ export function enrichment(overrides: Partial<AlertEnrichment> = {}): AlertEnric
         providers: [virusTotalAnswer()],
       },
     ],
+    ...overrides,
+  };
+}
+
+export function eventRecord(id: number, overrides: Partial<EventRecord> = {}): EventRecord {
+  return {
+    id,
+    timestamp: '2026-10-12T09:02:13Z',
+    ingested_at: '2026-10-13T08:00:00Z',
+    log_source: 'linux_auth',
+    host_name: 'web-01',
+    source_ip: '203.0.113.45',
+    source_port: 40112,
+    destination_ip: null,
+    destination_port: null,
+    user_name: 'root',
+    event_category: 'authentication',
+    event_action: 'ssh_login',
+    event_outcome: 'failure',
+    event_code: null,
+    process_name: 'sshd',
+    process_pid: 3101,
+    process_executable: null,
+    process_command_line: null,
+    process_parent_name: null,
+    process_parent_pid: null,
+    url_original: null,
+    http_method: null,
+    http_status_code: null,
+    user_agent: null,
+    message: 'Failed password for root from 203.0.113.45 port 40112 ssh2',
+    ioc_matched: false,
+    raw_event: { line: `raw line ${String(id)}` },
+    ...overrides,
+  };
+}
+
+export function alertDetail(overrides: Partial<AlertDetail> = {}): AlertDetail {
+  return {
+    ...alertSummary(),
+    enrichment: {},
+    rule: {
+      id: 'ssh-brute-force',
+      title: 'SSH brute force',
+      description: 'Many failed SSH logins from one address.',
+      false_positives: ['Users retrying an expired password'],
+    },
+    evidence: [eventRecord(1)],
+    activity: [],
+    ...overrides,
+  };
+}
+
+export function analyst(overrides: Partial<User> = {}): User {
+  return {
+    id: 3,
+    username: 'analyst.one',
+    full_name: 'Analyst One',
+    role: 'analyst',
+    is_active: true,
+    ...overrides,
+  };
+}
+
+export function caseSummary(overrides: Partial<CaseSummary> = {}): CaseSummary {
+  return {
+    id: 7,
+    title: 'SSH brute force on web-01',
+    severity: 'high',
+    status: 'open',
+    assignee_id: null,
+    created_by_id: null,
+    created_at: '2026-10-12T09:10:00Z',
+    updated_at: '2026-10-12T09:20:00Z',
+    resolved_at: null,
+    closed_at: null,
+    alert_count: 1,
+    open_alert_count: 1,
+    note_count: 0,
+    evidence_count: 0,
+    ...overrides,
+  };
+}
+
+export function caseDetail(overrides: Partial<CaseDetail> = {}): CaseDetail {
+  return {
+    ...caseSummary(),
+    description: 'Brute force from 203.0.113.45 ended in a login as backup.',
+    resolution: null,
+    assignee: null,
+    created_by: null,
+    alerts: [alertSummary({ case_id: 7, status: 'investigating' })],
+    notes: [],
+    evidence: [],
+    activity: [],
+    tactics: ['TA0006'],
+    techniques: ['T1110.001'],
+    entities: { hosts: ['web-01'], ips: ['203.0.113.45'], users: ['root'] },
     ...overrides,
   };
 }
