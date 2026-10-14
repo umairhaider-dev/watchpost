@@ -26,7 +26,7 @@ describe('Layout', () => {
     const user = userEvent.setup();
 
     renderAt('/');
-    await user.click(screen.getByRole('link', { name: 'Event schema' }));
+    await user.click(await screen.findByRole('link', { name: 'Event schema' }));
 
     expect(await screen.findByRole('heading', { name: 'Event schema' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Event schema' })).toHaveClass('active');
@@ -38,7 +38,7 @@ describe('Layout', () => {
     const user = userEvent.setup();
 
     renderAt('/');
-    await user.click(screen.getByRole('link', { name: 'Threat intel' }));
+    await user.click(await screen.findByRole('link', { name: 'Threat intel' }));
 
     expect(await screen.findByRole('heading', { name: 'Threat intel' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Threat intel' })).toHaveClass('active');
@@ -49,7 +49,7 @@ describe('Layout', () => {
     const user = userEvent.setup();
 
     renderAt('/');
-    await user.click(screen.getByRole('link', { name: 'Cases' }));
+    await user.click(await screen.findByRole('link', { name: 'Cases' }));
     expect(await screen.findByRole('heading', { name: 'Cases', level: 1 })).toBeInTheDocument();
 
     await user.click(screen.getByRole('link', { name: 'ATT&CK matrix' }));

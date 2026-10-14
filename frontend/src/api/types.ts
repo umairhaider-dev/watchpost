@@ -443,6 +443,47 @@ export interface User {
   is_active: boolean;
 }
 
+/** The full account record; only admins receive these fields. */
+export interface UserAccount extends User {
+  email: string | null;
+  last_login_at: string | null;
+  created_at: string;
+}
+
+/** The signed-in user, from ``/auth/me``. */
+export interface CurrentUser {
+  id: number;
+  username: string;
+  full_name: string | null;
+  email: string | null;
+  role: UserRole;
+}
+
+export interface SignedIn {
+  user: CurrentUser;
+  expires_at: string;
+}
+
+// ---------------------------------------------------------------- audit log
+
+export interface AuditEntry {
+  id: number;
+  occurred_at: string;
+  user_id: number | null;
+  username: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  details: Record<string, unknown>;
+  ip_address: string | null;
+  user_agent: string | null;
+}
+
+export interface AuditEntryPage {
+  items: AuditEntry[];
+  total: number;
+}
+
 // ---------------------------------------------------------------- cases
 
 export type CaseStatus = 'open' | 'in_progress' | 'resolved' | 'closed';

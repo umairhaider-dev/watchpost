@@ -2,8 +2,10 @@ import type {
   AlertDetail,
   AlertEnrichment,
   AlertSummary,
+  AuditEntry,
   CaseDetail,
   CaseSummary,
+  CurrentUser,
   Dashboard,
   DetectionRun,
   EventRecord,
@@ -12,6 +14,8 @@ import type {
   RuleDetail,
   RuleSummary,
   User,
+  UserAccount,
+  UserRole,
 } from '../api/types';
 
 export function ruleSummary(overrides: Partial<RuleSummary> = {}): RuleSummary {
@@ -246,6 +250,47 @@ export function analyst(overrides: Partial<User> = {}): User {
     full_name: 'Analyst One',
     role: 'analyst',
     is_active: true,
+    ...overrides,
+  };
+}
+
+/** A signed-in user with the given role, for ``stubApi(..., { user })``. */
+export function signedInAs(role: UserRole): CurrentUser {
+  return {
+    id: 3,
+    username: `${role}.one`,
+    full_name: null,
+    email: null,
+    role,
+  };
+}
+
+export function userAccount(overrides: Partial<UserAccount> = {}): UserAccount {
+  return {
+    id: 3,
+    username: 'analyst.one',
+    full_name: 'Analyst One',
+    email: 'analyst.one@example.org',
+    role: 'analyst',
+    is_active: true,
+    last_login_at: '2026-10-14T08:30:00Z',
+    created_at: '2026-10-01T09:00:00Z',
+    ...overrides,
+  };
+}
+
+export function auditEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
+  return {
+    id: 1,
+    occurred_at: '2026-10-14T09:15:00Z',
+    user_id: 1,
+    username: 'test.admin',
+    action: 'rule.disabled',
+    target_type: 'rule',
+    target_id: 'ssh-brute-force',
+    details: {},
+    ip_address: '10.20.0.5',
+    user_agent: 'Mozilla/5.0',
     ...overrides,
   };
 }

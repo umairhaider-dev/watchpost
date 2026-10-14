@@ -84,10 +84,12 @@ describe('MitrePage', () => {
 
     await user.selectOptions(screen.getByLabelText('Alerts from'), 'all');
 
-    const last = fetchMock.mock.calls.map(([input]) => requestUrl(input)).at(-1);
-    expect(last?.searchParams.get('since')).toBeNull();
-    const first = requestUrl(fetchMock.mock.calls[0]?.[0]);
-    expect(Date.now() - Date.parse(first.searchParams.get('since') ?? '')).toBeGreaterThan(
+    const matrixCalls = fetchMock.mock.calls
+      .map(([input]) => requestUrl(input))
+      .filter((url) => url.pathname === '/api/mitre/matrix');
+    expect(matrixCalls.at(-1)?.searchParams.get('since')).toBeNull();
+    const first = matrixCalls[0];
+    expect(Date.now() - Date.parse(first?.searchParams.get('since') ?? '')).toBeGreaterThan(
       29 * 24 * 3_600_000,
     );
   });

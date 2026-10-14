@@ -121,7 +121,7 @@ describe('IngestPage', () => {
     });
     renderAt('/ingest');
 
-    await user.upload(screen.getByLabelText('Log file'), new File(['line\n'], 'auth.log'));
+    await user.upload(await screen.findByLabelText('Log file'), new File(['line\n'], 'auth.log'));
     await user.selectOptions(await screen.findByLabelText('Format'), 'linux_auth');
     await user.type(screen.getByLabelText('Host name (optional)'), 'web-01');
     await user.click(screen.getByRole('button', { name: 'Upload and ingest' }));
@@ -140,7 +140,7 @@ describe('IngestPage', () => {
     );
     renderAt('/ingest');
 
-    await user.upload(screen.getByLabelText('Log file'), new File(['MZ'], 'tool.exe'));
+    await user.upload(await screen.findByLabelText('Log file'), new File(['MZ'], 'tool.exe'));
     await user.click(screen.getByRole('button', { name: 'Upload and ingest' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('the file looks binary');
@@ -151,7 +151,10 @@ describe('IngestPage', () => {
     renderAt('/ingest');
     await screen.findByText(/up to 1.0 KB/);
 
-    await user.upload(screen.getByLabelText('Log file'), new File(['x'.repeat(2048)], 'big.log'));
+    await user.upload(
+      await screen.findByLabelText('Log file'),
+      new File(['x'.repeat(2048)], 'big.log'),
+    );
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'larger than the 1.0 KB upload limit',
