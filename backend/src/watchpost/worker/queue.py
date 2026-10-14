@@ -49,7 +49,7 @@ class ArqJobQueue:
             _queue_name=self._queue_name,
         )
         if job is None:
-            logger.info("Ingestion job %d is already queued", job_id)
+            logger.debug("Ingestion job %d is already queued", job_id)
 
     async def enqueue_detection(self, run_id: int) -> None:
         job = await self._redis.enqueue_job(
@@ -59,7 +59,7 @@ class ArqJobQueue:
             _queue_name=self._queue_name,
         )
         if job is None:
-            logger.info("Detection run %d is already queued", run_id)
+            logger.debug("Detection run %d is already queued", run_id)
 
     async def enqueue_enrichment(self, alert_ids: Sequence[int]) -> None:
         if alert_ids:

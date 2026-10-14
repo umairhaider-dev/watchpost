@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,7 @@ from watchpost.db.models import (
     DetectionTrigger,
     IngestionJob,
     IngestOrigin,
+    IngestStatus,
     Rule,
 )
 from watchpost.intel.enrichment import Enricher
@@ -46,6 +47,7 @@ from watchpost.worker.tasks import (
     ping,
     queue_detection_for_job,
     queue_detection_for_sweep,
+    requeue_stale_work,
     run_detection,
     scan_watch_folder_job,
     sweep_iocs,
@@ -142,11 +144,14 @@ def test_cron_follows_settings(settings: Settings) -> None:
     every_fifteen = settings.model_copy(update={"watch_interval_seconds": 15})
     disabled = settings.model_copy(update={"watch_enabled": False})
 
-    [job] = build_cron_jobs(every_fifteen)
+    requeue, scan = build_cron_jobs(every_fifteen)
 
-    assert job.second == {0, 15, 30, 45}
-    assert job.run_at_startup
-    assert build_cron_jobs(disabled) == []
+    assert requeue.coroutine is requeue_stale_work
+    assert requeue.minute == set(range(0, 60, 5))
+    assert scan.coroutine is scan_watch_folder_job
+    assert scan.second == {0, 15, 30, 45}
+    assert scan.run_at_startup
+    assert [job.coroutine for job in build_cron_jobs(disabled)] == [requeue_stale_work]
 
 
 def test_pending_enrichment_is_retried_only_with_providers(settings: Settings) -> None:
@@ -154,7 +159,7 @@ def test_pending_enrichment_is_retried_only_with_providers(settings: Settings) -
         update={"watch_enabled": False, "virustotal_api_key": SecretStr("v-key")}
     )
 
-    [job] = build_cron_jobs(online)
+    _, job = build_cron_jobs(online)
 
     assert job.coroutine is enrich_pending
     assert job.minute == {0, 10, 20, 30, 40, 50}
@@ -345,6 +350,51 @@ async def test_no_sweep_detection_when_the_rule_is_disabled(
 
     assert await queue_detection_for_sweep(session_factory, queue, matched) is None
     assert await queue_detection_for_sweep(session_factory, queue, SweepResult()) is None
+
+
+async def test_work_stuck_in_queued_is_queued_again(
+    db_session: AsyncSession,
+    engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    app_settings: Settings,
+) -> None:
+    long_ago = datetime.now(UTC) - timedelta(minutes=30)
+    stuck_job = IngestionJob(
+        origin=IngestOrigin.WATCH_FOLDER,
+        filename="auth.log",
+        stored_path="unused",
+        parser="auto",
+        file_size=1,
+        created_at=long_ago,
+    )
+    fresh_job = IngestionJob(
+        origin=IngestOrigin.UPLOAD,
+        filename="new.log",
+        stored_path="unused",
+        parser="auto",
+        file_size=1,
+    )
+    finished_job = IngestionJob(
+        origin=IngestOrigin.UPLOAD,
+        filename="old.log",
+        stored_path="unused",
+        parser="auto",
+        file_size=1,
+        status=IngestStatus.COMPLETED,
+        created_at=long_ago,
+    )
+    stuck_run = DetectionRun(trigger=DetectionTrigger.INTEL, created_at=long_ago)
+    db_session.add_all([stuck_job, fresh_job, finished_job, stuck_run])
+    await db_session.flush()
+    redis = FakeArqRedis()
+
+    checked = await requeue_stale_work(make_ctx(app_settings, engine, session_factory, redis))
+
+    assert checked == 2
+    assert [(function, args) for function, args, _ in redis.calls] == [
+        (INGEST_FILE_JOB, (stuck_job.id,)),
+        (DETECTION_JOB, (stuck_run.id,)),
+    ]
 
 
 def test_job_queue_requires_arq_connection() -> None:

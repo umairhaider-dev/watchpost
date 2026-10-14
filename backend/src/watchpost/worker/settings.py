@@ -27,6 +27,7 @@ from watchpost.worker.tasks import (
     enrich_pending,
     ingest_file,
     ping,
+    requeue_stale_work,
     run_detection,
     scan_watch_folder_job,
     sweep_iocs,
@@ -71,8 +72,10 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 
 
 def build_cron_jobs(settings: Settings) -> list[CronJob]:
-    """The periodic folder scan and the retry of rate-limited lookups, when relevant."""
-    jobs = []
+    """Periodic jobs: queue recovery always; folder scan and lookup retries when enabled."""
+    jobs = [
+        cron(requeue_stale_work, minute=set(range(0, 60, 5)), second=45, unique=True, timeout=120)
+    ]
     if settings.watch_enabled:
         jobs.append(
             cron(

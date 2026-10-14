@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -17,7 +18,14 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from watchpost.core.config import Settings
-from watchpost.db.models import DetectionTrigger, IngestionJob, IngestStatus, Rule
+from watchpost.db.models import (
+    DetectionRun,
+    DetectionStatus,
+    DetectionTrigger,
+    IngestionJob,
+    IngestStatus,
+    Rule,
+)
 from watchpost.detection.runner import create_run, execute_run
 from watchpost.ingestion.jobs import run_ingestion_job
 from watchpost.ingestion.watcher import scan_watch_folder
@@ -30,6 +38,8 @@ from watchpost.worker.queue import ArqJobQueue, JobQueue
 logger = logging.getLogger(__name__)
 
 CONTEXT_KEY = "watchpost"
+# Work still "queued" this long after it was recorded is put on the queue again.
+STALE_QUEUED_AFTER = timedelta(minutes=5)
 
 
 @dataclass(slots=True)
@@ -164,6 +174,45 @@ async def queue_detection_for_sweep(
         await session.commit()
     await queue.enqueue_detection(run_id)
     return run_id
+
+
+async def requeue_stale_work(ctx: dict[str, Any]) -> int:
+    """Cron job: queue again any ingestion job or detection run stuck in ``queued``.
+
+    Rows are committed before their job is put on the queue, so a Redis outage
+    or a crash in between would otherwise leave them waiting forever. arq job
+    IDs are deterministic, so work that is genuinely still waiting in the queue
+    is not duplicated. Returns how many items were checked.
+    """
+    wctx = worker_context(ctx)
+    cutoff = datetime.now(UTC) - STALE_QUEUED_AFTER
+    async with wctx.session_factory() as session:
+        job_ids = list(
+            await session.scalars(
+                select(IngestionJob.id).where(
+                    IngestionJob.status == IngestStatus.QUEUED, IngestionJob.created_at < cutoff
+                )
+            )
+        )
+        run_ids = list(
+            await session.scalars(
+                select(DetectionRun.id).where(
+                    DetectionRun.status == DetectionStatus.QUEUED, DetectionRun.created_at < cutoff
+                )
+            )
+        )
+    queue = job_queue(ctx)
+    for job_id in job_ids:
+        await queue.enqueue_ingestion(job_id)
+    for run_id in run_ids:
+        await queue.enqueue_detection(run_id)
+    if job_ids or run_ids:
+        logger.info(
+            "Checked %d ingestion jobs and %d detection runs still waiting in the queue",
+            len(job_ids),
+            len(run_ids),
+        )
+    return len(job_ids) + len(run_ids)
 
 
 async def scan_watch_folder_job(ctx: dict[str, Any]) -> int:
