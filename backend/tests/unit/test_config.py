@@ -24,6 +24,8 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "WATCHPOST_CORS_ORIGINS",
         "WATCHPOST_DATABASE_URL",
         "WATCHPOST_LOG_LEVEL",
+        "WATCHPOST_ABUSEIPDB_API_KEY",
+        "WATCHPOST_VIRUSTOTAL_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -64,6 +66,17 @@ def test_blank_secret_is_treated_as_missing() -> None:
 
     assert settings.secret_key is not None
     assert settings.secret_key.get_secret_value().strip() != ""
+
+
+def test_provider_keys_are_optional_and_blank_means_unset() -> None:
+    assert make_settings().abuseipdb_api_key is None
+
+    settings = make_settings(abuseipdb_api_key="  ", virustotal_api_key="vt-key")
+
+    assert settings.abuseipdb_api_key is None
+    assert settings.virustotal_api_key is not None
+    assert settings.virustotal_api_key.get_secret_value() == "vt-key"
+    assert "vt-key" not in repr(settings)
 
 
 def test_production_requires_secret_key() -> None:

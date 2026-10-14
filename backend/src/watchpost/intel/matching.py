@@ -13,6 +13,8 @@ Indicators are pulled out of an event row (``events`` columns plus
 
 Matching happens twice: as events are ingested, and in a sweep over stored
 events whenever indicators are imported, so old activity is flagged too.
+Flagged events set ``threat.matched``, which the built-in rule
+:data:`INTEL_RULE_ID` turns into alerts.
 """
 
 from __future__ import annotations
@@ -35,6 +37,8 @@ from watchpost.ingestion.values import clean_ip
 from watchpost.intel.indicators import HASH_TYPES, normalize_domain, parent_domains
 
 logger = logging.getLogger(__name__)
+
+INTEL_RULE_ID = "threat-intel-indicator-match"
 
 _EVENT_DATA_DOMAINS = ("QueryName", "DestinationHostname")
 _ORIGINAL_DOMAINS = (
@@ -220,17 +224,17 @@ class IndicatorIndex:
         return found
 
 
-async def link_matches(session: AsyncSession, links: Sequence[tuple[int, int, str]]) -> int:
-    """Record ``(event_id, ioc_id, field)`` matches; returns how many were new."""
+async def link_matches(session: AsyncSession, links: Sequence[tuple[int, int, str]]) -> list[int]:
+    """Record ``(event_id, ioc_id, field)`` matches; returns the event ID of each new one."""
     if not links:
-        return 0
+        return []
     result = await session.execute(
         pg_insert(event_ioc_matches)
         .values([{"event_id": e, "ioc_id": i, "field": f} for e, i, f in links])
         .on_conflict_do_nothing()
         .returning(event_ioc_matches.c.event_id)
     )
-    return len(result.all())
+    return list(result.scalars())
 
 
 @dataclass(slots=True)
@@ -250,8 +254,9 @@ async def sweep_events(
 ) -> SweepResult:
     """Match stored events against indicators and record new matches.
 
-    ``first``/``last`` span the events that gained a match, so the caller can
-    run detection over just that period.
+    ``first``/``last`` span the events that gained a new match, so the caller
+    can run detection over just that period; both stay ``None`` when every
+    match was already known.
     """
     async with session_factory() as session:
         index = await IndicatorIndex.load(session, ioc_ids)
@@ -273,9 +278,12 @@ async def sweep_events(
 
     if not links:
         return result
+    newly_linked: set[int] = set()
     async with session_factory() as session:
         for start in range(0, len(links), 5_000):
-            result.new_links += await link_matches(session, links[start : start + 5_000])
+            linked = await link_matches(session, links[start : start + 5_000])
+            result.new_links += len(linked)
+            newly_linked.update(linked)
         ids = list(matched)
         for start in range(0, len(ids), 5_000):
             await session.execute(
@@ -285,8 +293,9 @@ async def sweep_events(
             )
         await session.commit()
     result.events_matched = len(matched)
-    result.first = min(matched.values())
-    result.last = max(matched.values())
+    if newly_linked:
+        result.first = min(matched[event_id] for event_id in newly_linked)
+        result.last = max(matched[event_id] for event_id in newly_linked)
     logger.info(
         "Indicator sweep: %d events scanned against %d indicators, %d matched (%d new links)",
         result.events_scanned,

@@ -1,48 +1,14 @@
 from __future__ import annotations
 
-import shutil
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from tests.integration.helpers import import_sample_feed, ingest_sample
 from watchpost.core.config import Settings
-from watchpost.db.models import Event, IngestionJob, IngestOrigin, Ioc, IocType, event_ioc_matches
-from watchpost.ingestion.jobs import run_ingestion_job
-from watchpost.intel.feeds import parse_feed
+from watchpost.db.models import Event, Ioc, IocType, event_ioc_matches
 from watchpost.intel.matching import sweep_events
-from watchpost.intel.store import upsert_iocs
-
-SAMPLES = Path(__file__).resolve().parents[3] / "samples"
-
-
-async def import_sample_feed(session: AsyncSession) -> list[int]:
-    feed = parse_feed((SAMPLES / "iocs.csv").read_bytes(), "iocs.csv")
-    result = await upsert_iocs(session, feed.entries, source="iocs.csv")
-    return result.ioc_ids
-
-
-async def ingest_sample(
-    db_session: AsyncSession,
-    session_factory: async_sessionmaker[AsyncSession],
-    settings: Settings,
-    name: str,
-) -> int:
-    settings.upload_dir.mkdir(parents=True, exist_ok=True)
-    path = settings.upload_dir / name
-    shutil.copy(SAMPLES / name, path)
-    job = IngestionJob(
-        origin=IngestOrigin.UPLOAD,
-        filename=name,
-        stored_path=str(path),
-        parser="auto",
-        file_size=path.stat().st_size,
-    )
-    db_session.add(job)
-    await db_session.flush()
-    await run_ingestion_job(session_factory, settings, job.id)
-    return job.id
 
 
 async def matched(session: AsyncSession) -> dict[str, list[str]]:
@@ -111,6 +77,8 @@ async def test_sweep_flags_events_stored_before_the_indicators(
 
     again = await sweep_events(session_factory, ioc_ids=ioc_ids)
     assert again.new_links == 0
+    assert again.events_matched == result.events_matched
+    assert again.first is None and again.last is None  # nothing new to run detection over
 
 
 async def test_sweep_respects_since_and_inactive_or_expired_indicators(

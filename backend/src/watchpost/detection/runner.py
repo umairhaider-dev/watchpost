@@ -292,6 +292,8 @@ async def _detect_new_values(
 class SaveResult:
     created: int = 0
     updated: int = 0
+    # Alerts that are new or gained evidence, i.e. worth enriching again.
+    changed_ids: list[int] = field(default_factory=list)
 
 
 def alert_title(rule: CompiledRule, hit: Hit) -> str:
@@ -358,6 +360,8 @@ async def save_hits(session: AsyncSession, hits: Sequence[tuple[CompiledRule, Hi
                 .where(Alert.id == alert_id)
                 .values(event_count=Alert.event_count + linked + overflow)
             )
+        if (created or linked) and alert_id not in saved.changed_ids:
+            saved.changed_ids.append(alert_id)
         if created:
             saved.created += 1
         else:
@@ -395,10 +399,16 @@ async def create_run(
     return run
 
 
+@dataclass(frozen=True, slots=True)
+class RunOutcome:
+    status: DetectionStatus
+    changed_alert_ids: list[int] = field(default_factory=list)
+
+
 async def execute_run(
     session_factory: async_sessionmaker[AsyncSession], run_id: int
-) -> DetectionStatus | None:
-    """Carry out a queued detection run. Returns its final status, or ``None`` if skipped."""
+) -> RunOutcome | None:
+    """Carry out a queued detection run; ``None`` if it was missing or already finished."""
     async with session_factory() as session:
         run = await session.get(DetectionRun, run_id, with_for_update=True)
         if run is None or run.status in {DetectionStatus.COMPLETED, DetectionStatus.FAILED}:
@@ -448,7 +458,7 @@ async def execute_run(
                 )
             )
             await session.commit()
-        return DetectionStatus.FAILED
+        return RunOutcome(DetectionStatus.FAILED)
     logger.info(
         "Detection run %d: %d events, %d hits, %d new alerts, %d updated",
         run_id,
@@ -457,4 +467,4 @@ async def execute_run(
         saved.created,
         saved.updated,
     )
-    return DetectionStatus.COMPLETED
+    return RunOutcome(DetectionStatus.COMPLETED, saved.changed_ids)

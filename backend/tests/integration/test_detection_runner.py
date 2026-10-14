@@ -40,11 +40,6 @@ SAMPLE_FILES = (
 )
 
 
-@pytest.fixture
-async def rules(db_session: AsyncSession) -> None:
-    await sync_builtin_rules(db_session, RULES_DIR)
-
-
 async def ingest(
     db_session: AsyncSession,
     session_factory: async_sessionmaker[AsyncSession],
@@ -193,7 +188,9 @@ async def test_manual_time_range_run_matches_job_runs(
     app_settings: Settings,
 ) -> None:
     job_id = await ingest_sample(db_session, session_factory, app_settings, "access.log")
-    by_job = await detect_job(db_session, session_factory, job_id)
+    run = await create_run(db_session, trigger=DetectionTrigger.INGESTION, ingest_job_id=job_id)
+    by_job = await execute_run(session_factory, run.id)
+    assert by_job is not None
 
     manual = await create_run(
         db_session,
@@ -201,12 +198,14 @@ async def test_manual_time_range_run_matches_job_runs(
         start=datetime(2026, 10, 12, tzinfo=UTC),
         end=datetime(2026, 10, 13, tzinfo=UTC),
     )
-    await execute_run(session_factory, manual.id)
+    again = await execute_run(session_factory, manual.id)
     await db_session.refresh(manual)
 
     assert manual.events_scanned == 44
     assert manual.alerts_created == 0
-    assert manual.alerts_updated == by_job.alerts_created
+    assert manual.alerts_updated == len(by_job.changed_alert_ids) > 0
+    # Same events, no new evidence: nothing needs enriching again.
+    assert again is not None and again.changed_alert_ids == []
 
 
 @pytest.mark.usefixtures("rules")
@@ -321,7 +320,8 @@ async def test_failures_are_recorded_on_the_run(
     monkeypatch.setattr("watchpost.detection.runner.detect", explode)
     run = await create_run(db_session, trigger=DetectionTrigger.MANUAL)
 
-    assert await execute_run(session_factory, run.id) is DetectionStatus.FAILED
+    outcome = await execute_run(session_factory, run.id)
+    assert outcome is not None and outcome.status is DetectionStatus.FAILED
     await db_session.refresh(run)
     assert run.status is DetectionStatus.FAILED
     assert run.error == "detection failed; see worker logs"
@@ -349,7 +349,8 @@ async def test_empty_scope_completes_without_alerts(
         end=datetime(2001, 1, 2, tzinfo=UTC),
     )
 
-    assert await execute_run(session_factory, run.id) is DetectionStatus.COMPLETED
+    outcome = await execute_run(session_factory, run.id)
+    assert outcome is not None and outcome.status is DetectionStatus.COMPLETED
     await db_session.refresh(run)
     assert (run.events_scanned, run.hits, run.alerts_created) == (0, 0, 0)
 

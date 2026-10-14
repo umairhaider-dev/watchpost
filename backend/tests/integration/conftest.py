@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 
 import pytest
@@ -12,9 +12,11 @@ from httpx import ASGITransport, AsyncClient
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from tests.integration.helpers import RULES_DIR
 from watchpost.api.app import create_app
 from watchpost.api.deps import AppResources, get_session
 from watchpost.core.config import Settings
+from watchpost.detection.store import sync_builtin_rules
 
 
 class RecordingQueue:
@@ -23,6 +25,8 @@ class RecordingQueue:
     def __init__(self) -> None:
         self.job_ids: list[int] = []
         self.detection_runs: list[int] = []
+        self.enrichments: list[list[int]] = []
+        self.sweeps: list[list[int] | None] = []
         self.fail = False
 
     async def enqueue_ingestion(self, job_id: int) -> None:
@@ -36,6 +40,18 @@ class RecordingQueue:
             msg = "redis is down"
             raise RedisConnectionError(msg)
         self.detection_runs.append(run_id)
+
+    async def enqueue_enrichment(self, alert_ids: Sequence[int]) -> None:
+        if self.fail:
+            msg = "redis is down"
+            raise RedisConnectionError(msg)
+        self.enrichments.append(list(alert_ids))
+
+    async def enqueue_sweep(self, ioc_ids: Sequence[int] | None) -> None:
+        if self.fail:
+            msg = "redis is down"
+            raise RedisConnectionError(msg)
+        self.sweeps.append(list(ioc_ids) if ioc_ids is not None else None)
 
 
 @pytest.fixture
@@ -63,6 +79,12 @@ def session_factory(db_session: AsyncSession) -> async_sessionmaker[AsyncSession
         expire_on_commit=False,
         join_transaction_mode="create_savepoint",
     )
+
+
+@pytest.fixture
+async def rules(db_session: AsyncSession) -> None:
+    """The built-in rules, loaded into the database."""
+    await sync_builtin_rules(db_session, RULES_DIR)
 
 
 @pytest.fixture

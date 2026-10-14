@@ -73,6 +73,15 @@ class Settings(BaseSettings):
         description="Folder with the built-in rule YAML files, loaded by `watchpost sync-rules`.",
     )
 
+    # Threat intelligence enrichment (each provider is used only if its key is set)
+    abuseipdb_api_key: SecretStr | None = None
+    virustotal_api_key: SecretStr | None = None
+    enrichment_cache_hours: int = Field(default=24, ge=1, le=24 * 30)
+    enrichment_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    abuseipdb_daily_limit: int = Field(default=1000, ge=1)
+    virustotal_per_minute: int = Field(default=4, ge=1)
+    virustotal_daily_limit: int = Field(default=500, ge=1)
+
     # Ingestion
     upload_dir: Path = Field(
         default=Path("data/uploads"),
@@ -111,7 +120,7 @@ class Settings(BaseSettings):
     def _normalise_log_level(cls, value: object) -> object:
         return value.upper() if isinstance(value, str) else value
 
-    @field_validator("secret_key", mode="before")
+    @field_validator("secret_key", "abuseipdb_api_key", "virustotal_api_key", mode="before")
     @classmethod
     def _blank_secret_is_unset(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():

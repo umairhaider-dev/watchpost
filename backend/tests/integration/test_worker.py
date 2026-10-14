@@ -2,26 +2,53 @@ from __future__ import annotations
 
 import os
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 from arq.connections import ArqRedis
+from fakeredis import FakeAsyncRedis
+from pydantic import SecretStr
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from tests.fake_services import FakeServices, make_enricher
+from tests.integration.helpers import import_sample_feed, ingest_sample
 from watchpost.core.config import Settings
-from watchpost.db.models import DetectionRun, DetectionTrigger, IngestionJob, IngestOrigin
-from watchpost.worker.queue import DETECTION_JOB, INGEST_FILE_JOB, QUEUE_NAME, ArqJobQueue
+from watchpost.db.models import (
+    Alert,
+    DetectionRun,
+    DetectionTrigger,
+    IngestionJob,
+    IngestOrigin,
+    Rule,
+)
+from watchpost.intel.enrichment import Enricher
+from watchpost.intel.matching import INTEL_RULE_ID, SweepResult
+from watchpost.worker.queue import (
+    DETECTION_JOB,
+    ENRICH_ALERTS_JOB,
+    INGEST_FILE_JOB,
+    QUEUE_NAME,
+    SWEEP_IOCS_JOB,
+    ArqJobQueue,
+)
 from watchpost.worker.settings import WorkerSettings, build_cron_jobs, shutdown, startup
 from watchpost.worker.tasks import (
     CONTEXT_KEY,
     WorkerContext,
+    enrich_alerts,
+    enrich_pending,
+    enricher,
     ingest_file,
     job_queue,
     ping,
     queue_detection_for_job,
+    queue_detection_for_sweep,
     run_detection,
     scan_watch_folder_job,
+    sweep_iocs,
     worker_context,
 )
 
@@ -46,10 +73,14 @@ def make_ctx(
     engine: AsyncEngine,
     session_factory: async_sessionmaker[AsyncSession],
     redis: ArqRedis | None = None,
+    enrichment: Enricher | None = None,
 ) -> dict[str, Any]:
     ctx: dict[str, Any] = {
         CONTEXT_KEY: WorkerContext(
-            settings=settings, engine=engine, session_factory=session_factory
+            settings=settings,
+            engine=engine,
+            session_factory=session_factory,
+            enricher=enrichment,
         )
     }
     if redis is not None:
@@ -58,14 +89,33 @@ def make_ctx(
 
 
 async def test_startup_ping_and_shutdown() -> None:
-    ctx: dict[str, Any] = {"job_id": "test-job"}
+    redis = FakeAsyncRedis()
+    ctx: dict[str, Any] = {"job_id": "test-job", "redis": redis}
 
     await startup(ctx)
     try:
-        assert isinstance(ctx[CONTEXT_KEY], WorkerContext)
+        wctx = ctx[CONTEXT_KEY]
+        assert isinstance(wctx, WorkerContext)
+        assert enricher(ctx) is wctx.enricher
         assert await ping(ctx) == "pong"
     finally:
         await shutdown(ctx)
+        await redis.aclose()
+    assert wctx.http is not None and wctx.http.is_closed
+
+
+async def test_startup_needs_arq_redis() -> None:
+    with pytest.raises(RuntimeError, match="Redis connection"):
+        await startup({})
+
+
+def test_enrichment_jobs_need_the_enricher(
+    settings: Settings,
+    engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    with pytest.raises(RuntimeError, match="enrichment is not set up"):
+        enricher(make_ctx(settings, engine, session_factory))
 
 
 async def test_job_without_startup_context_fails_loudly() -> None:
@@ -82,6 +132,8 @@ def test_worker_settings_register_jobs() -> None:
     assert ping in WorkerSettings.functions
     assert ingest_file in WorkerSettings.functions
     assert run_detection in WorkerSettings.functions
+    assert enrich_alerts in WorkerSettings.functions
+    assert sweep_iocs in WorkerSettings.functions
     assert WorkerSettings.queue_name == QUEUE_NAME
     assert WorkerSettings.redis_settings.host
 
@@ -97,6 +149,18 @@ def test_cron_follows_settings(settings: Settings) -> None:
     assert build_cron_jobs(disabled) == []
 
 
+def test_pending_enrichment_is_retried_only_with_providers(settings: Settings) -> None:
+    online = settings.model_copy(
+        update={"watch_enabled": False, "virustotal_api_key": SecretStr("v-key")}
+    )
+
+    [job] = build_cron_jobs(online)
+
+    assert job.coroutine is enrich_pending
+    assert job.minute == {0, 10, 20, 30, 40, 50}
+
+
+@pytest.mark.usefixtures("rules")
 async def test_ingest_file_task(
     db_session: AsyncSession,
     engine: AsyncEngine,
@@ -132,6 +196,13 @@ async def test_ingest_file_task(
 
     assert await run_detection(ctx, run_id) == "completed"
     assert await run_detection(ctx, run_id) == "skipped"
+
+    # New alerts are handed to the enrichment job.
+    function, (alert_ids,), kwargs = redis.calls[-1]
+    assert function == ENRICH_ALERTS_JOB
+    assert kwargs == {"_queue_name": QUEUE_NAME}
+    assert sorted(alert_ids) == list(await db_session.scalars(select(Alert.id).order_by(Alert.id)))
+    assert len(alert_ids) > 0
 
 
 async def test_no_detection_is_queued_when_nothing_new_was_stored(
@@ -181,6 +252,99 @@ async def test_enqueue_is_idempotent() -> None:
     queue = ArqJobQueue(FakeArqRedis(already_queued=True))
 
     await queue.enqueue_ingestion(7)  # logs and returns instead of failing
+
+
+async def test_enrichment_and_sweep_enqueue_through_arq() -> None:
+    redis = FakeArqRedis()
+    queue = ArqJobQueue(redis)
+
+    await queue.enqueue_enrichment([])
+    await queue.enqueue_enrichment((4, 5))
+    await queue.enqueue_sweep(None)
+    await queue.enqueue_sweep([9])
+
+    assert redis.calls == [
+        (ENRICH_ALERTS_JOB, ([4, 5],), {"_queue_name": QUEUE_NAME}),
+        (SWEEP_IOCS_JOB, (None,), {"_queue_name": QUEUE_NAME}),
+        (SWEEP_IOCS_JOB, ([9],), {"_queue_name": QUEUE_NAME}),
+    ]
+
+
+@pytest.mark.usefixtures("rules")
+async def test_enrichment_jobs(
+    db_session: AsyncSession,
+    engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    app_settings: Settings,
+    fake_redis: FakeAsyncRedis,
+) -> None:
+    await import_sample_feed(db_session)
+    job_id = await ingest_sample(db_session, session_factory, app_settings, "auth.log")
+    redis = FakeArqRedis()
+    async with FakeServices().client() as client:
+        service = make_enricher(session_factory, fake_redis, client, providers=[])
+        ctx = make_ctx(app_settings, engine, session_factory, redis, service)
+        run_id = await queue_detection_for_job(session_factory, ArqJobQueue(redis), job_id)
+        assert run_id is not None
+        await run_detection(ctx, run_id)
+        _, (alert_ids,), _ = redis.calls[-1]
+
+        assert await enrich_alerts(ctx, alert_ids) == len(alert_ids)
+        assert await enrich_pending(ctx) == 0
+
+        # An alert left waiting on a rate limit is picked up by the cron job.
+        await db_session.execute(
+            update(Alert).where(Alert.id == alert_ids[0]).values(enrichment={"pending": True})
+        )
+        assert await enrich_pending(ctx) == 1
+
+    db_session.expire_all()
+    alerts = list(await db_session.scalars(select(Alert).where(Alert.id.in_(alert_ids))))
+    assert all(alert.enrichment["pending"] is False for alert in alerts)
+    assert any(alert.enrichment["verdict"] == "malicious" for alert in alerts)
+
+
+@pytest.mark.usefixtures("rules")
+async def test_sweep_job_alerts_on_events_stored_before_the_indicators(
+    db_session: AsyncSession,
+    engine: AsyncEngine,
+    session_factory: async_sessionmaker[AsyncSession],
+    app_settings: Settings,
+) -> None:
+    await ingest_sample(db_session, session_factory, app_settings, "auth.log")
+    ioc_ids = await import_sample_feed(db_session)
+    redis = FakeArqRedis()
+    ctx = make_ctx(app_settings, engine, session_factory, redis)
+
+    assert await sweep_iocs(ctx, ioc_ids) > 0
+
+    [(function, (run_id,), _)] = redis.calls
+    assert function == DETECTION_JOB
+    run = await db_session.get(DetectionRun, run_id)
+    assert run is not None
+    assert run.trigger is DetectionTrigger.INTEL
+    assert run.rule_ids == [INTEL_RULE_ID]
+    assert run.range_start is not None and run.range_end is not None
+    assert await run_detection(ctx, run_id) == "completed"
+    intel_alerts = await db_session.scalars(select(Alert).where(Alert.rule_id == INTEL_RULE_ID))
+    assert [alert.source_ip for alert in intel_alerts] == ["203.0.113.45"]
+
+    # A second sweep finds the same matches but nothing new to alert on.
+    assert await sweep_iocs(ctx, ioc_ids) > 0
+    assert [call[0] for call in redis.calls] == [DETECTION_JOB, ENRICH_ALERTS_JOB]
+
+
+@pytest.mark.usefixtures("rules")
+async def test_no_sweep_detection_when_the_rule_is_disabled(
+    db_session: AsyncSession, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    await db_session.execute(update(Rule).where(Rule.id == INTEL_RULE_ID).values(enabled=False))
+    queue = ArqJobQueue(FakeArqRedis())
+    now = datetime.now(UTC)
+    matched = SweepResult(events_matched=1, new_links=1, first=now, last=now)
+
+    assert await queue_detection_for_sweep(session_factory, queue, matched) is None
+    assert await queue_detection_for_sweep(session_factory, queue, SweepResult()) is None
 
 
 def test_job_queue_requires_arq_connection() -> None:

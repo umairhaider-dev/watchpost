@@ -58,6 +58,7 @@ class DetectionTrigger(StrEnum):
 
     INGESTION = "ingestion"  # new events arrived from an ingestion job
     MANUAL = "manual"  # an analyst asked to scan a time range
+    INTEL = "intel"  # new indicators matched events that were already stored
 
 
 class DetectionStatus(StrEnum):
