@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
+import { usePermissions } from '../api/auth';
 import { useAlertTimeline, useUpdateAlert } from '../api/investigation';
 import { useAlert } from '../api/queries';
 import type { AlertDetail, AlertStatus, TimelineEvent } from '../api/types';
@@ -22,6 +23,7 @@ const WINDOWS = [5, 15, 30, 60, 240, 1440];
 
 function Triage({ alert }: { alert: AlertDetail }) {
   const update = useUpdateAlert(alert.id);
+  const { canEdit } = usePermissions();
   const statusId = useId();
 
   return (
@@ -34,7 +36,7 @@ function Triage({ alert }: { alert: AlertDetail }) {
           <select
             id={statusId}
             value={alert.status}
-            disabled={update.isPending}
+            disabled={!canEdit || update.isPending}
             onChange={(event) => {
               update.mutate({ status: event.target.value as AlertStatus });
             }}
@@ -49,7 +51,7 @@ function Triage({ alert }: { alert: AlertDetail }) {
         <AssigneeSelect
           label="Assignee"
           value={alert.assignee_id}
-          disabled={update.isPending}
+          disabled={!canEdit || update.isPending}
           onChange={(assigneeId) => {
             update.mutate({ assignee_id: assigneeId });
           }}
@@ -71,9 +73,9 @@ function Triage({ alert }: { alert: AlertDetail }) {
           </Link>
           .
         </p>
-      ) : (
+      ) : canEdit ? (
         <AddToCaseForm alertIds={[alert.id]} defaultTitle={alert.title} />
-      )}
+      ) : null}
     </Card>
   );
 }

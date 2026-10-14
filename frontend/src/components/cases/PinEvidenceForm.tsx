@@ -1,12 +1,14 @@
 import { type SubmitEvent, useId, useState } from 'react';
 import { Link } from 'react-router';
 
+import { usePermissions } from '../../api/auth';
 import { useCases, usePinEvidence } from '../../api/investigation';
 
 /** Pin one event to an open case as evidence, with a note on why it matters. */
 export function PinEvidenceForm({ eventId }: { eventId: number }) {
   const cases = useCases({ status: 'active', assignee: '', q: '' });
   const pin = usePinEvidence();
+  const { canEdit } = usePermissions();
   const [caseId, setCaseId] = useState('');
   const [note, setNote] = useState('');
   const caseFieldId = useId();
@@ -26,6 +28,8 @@ export function PinEvidenceForm({ eventId }: { eventId: number }) {
       </p>
     );
   }
+
+  if (!canEdit) return null;
 
   return (
     <form className="inline-form" onSubmit={handleSubmit} aria-label="Pin as evidence">

@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 
+import { usePermissions } from '../../api/auth';
 import { useDetectionRuns, useStartDetectionRun } from '../../api/queries';
 import type { DetectionRun } from '../../api/types';
 import { countOf, formatUtc } from '../../lib/format';
@@ -25,6 +26,7 @@ function describeScope(run: DetectionRun): string {
 export function DetectionRunsCard() {
   const runs = useDetectionRuns();
   const start = useStartDetectionRun();
+  const { canEdit } = usePermissions();
   const [range, setRange] = useState<RangeValue>('7d');
   const selectId = useId();
 
@@ -41,27 +43,29 @@ export function DetectionRunsCard() {
         New uploads are scanned automatically. Run the enabled rules over stored events after
         enabling or editing a rule.
       </p>
-      <div className="inline-field">
-        <label htmlFor={selectId} className="muted small">
-          Scan
-        </label>
-        <select
-          id={selectId}
-          value={range}
-          onChange={(event) => {
-            setRange(event.target.value as RangeValue);
-          }}
-        >
-          {RANGES.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <button type="button" className="button" disabled={start.isPending} onClick={startRun}>
-          {start.isPending ? 'Starting…' : 'Run detection'}
-        </button>
-      </div>
+      {canEdit ? (
+        <div className="inline-field">
+          <label htmlFor={selectId} className="muted small">
+            Scan
+          </label>
+          <select
+            id={selectId}
+            value={range}
+            onChange={(event) => {
+              setRange(event.target.value as RangeValue);
+            }}
+          >
+            {RANGES.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="button" disabled={start.isPending} onClick={startRun}>
+            {start.isPending ? 'Starting…' : 'Run detection'}
+          </button>
+        </div>
+      ) : null}
       {start.isError ? (
         <p className="text-error" role="alert">
           {start.error.message}

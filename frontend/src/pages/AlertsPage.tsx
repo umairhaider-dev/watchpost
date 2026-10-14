@@ -1,6 +1,7 @@
 import { type SubmitEvent, useId, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
+import { usePermissions } from '../api/auth';
 import { useAssignableUsers, useBulkUpdateAlerts } from '../api/investigation';
 import {
   type AlertFilters,
@@ -139,6 +140,7 @@ export function AlertsPage() {
   const [selected, setSelected] = useState<number[]>([]);
   const alerts = useAlerts(filters);
   const users = useAssignableUsers();
+  const { canEdit } = usePermissions();
   const sortId = useId();
   const assigneeId = useId();
   const items = useMemo(() => alerts.data?.items ?? [], [alerts.data]);
@@ -293,16 +295,18 @@ export function AlertsPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th scope="col">
-                    <input
-                      type="checkbox"
-                      aria-label="Select all alerts"
-                      checked={allSelected}
-                      onChange={() => {
-                        setSelected(allSelected ? [] : items.map((alert) => alert.id));
-                      }}
-                    />
-                  </th>
+                  {canEdit ? (
+                    <th scope="col">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all alerts"
+                        checked={allSelected}
+                        onChange={() => {
+                          setSelected(allSelected ? [] : items.map((alert) => alert.id));
+                        }}
+                      />
+                    </th>
+                  ) : null}
                   <th scope="col">Alert</th>
                   <th scope="col">Severity</th>
                   <th scope="col">Entity</th>
@@ -317,16 +321,18 @@ export function AlertsPage() {
               <tbody>
                 {items.map((alert) => (
                   <tr key={alert.id}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        aria-label={`Select alert ${String(alert.id)}`}
-                        checked={selected.includes(alert.id)}
-                        onChange={() => {
-                          setSelected((current) => toggle(current, alert.id));
-                        }}
-                      />
-                    </td>
+                    {canEdit ? (
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select alert ${String(alert.id)}`}
+                          checked={selected.includes(alert.id)}
+                          onChange={() => {
+                            setSelected((current) => toggle(current, alert.id));
+                          }}
+                        />
+                      </td>
+                    ) : null}
                     <td>
                       <Link className="link" to={`/alerts/${String(alert.id)}`}>
                         {alert.title}

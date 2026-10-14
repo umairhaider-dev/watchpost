@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 
+import { usePermissions } from '../api/auth';
 import { useRules, useToggleRule } from '../api/queries';
 import type { RuleSummary, Severity } from '../api/types';
 import { Card } from '../components/Card';
@@ -28,6 +29,7 @@ const TYPE_LABELS: Record<RuleSummary['rule_type'], string> = {
 export function RulesPage() {
   const rules = useRules();
   const toggle = useToggleRule();
+  const { isAdmin } = usePermissions();
   const [query, setQuery] = useState('');
 
   const visible = useMemo(() => {
@@ -106,7 +108,7 @@ export function RulesPage() {
                         <Switch
                           checked={rule.enabled}
                           label={`${rule.enabled ? 'Disable' : 'Enable'} ${rule.title}`}
-                          disabled={toggle.isPending}
+                          disabled={!isAdmin || toggle.isPending}
                           onChange={(enabled) => {
                             toggle.mutate({ id: rule.id, enabled });
                           }}

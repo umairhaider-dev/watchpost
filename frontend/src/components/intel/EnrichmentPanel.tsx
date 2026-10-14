@@ -1,3 +1,4 @@
+import { usePermissions } from '../../api/auth';
 import { useEnrichAlert } from '../../api/queries';
 import type { AlertDetail } from '../../api/types';
 import { formatUtc } from '../../lib/format';
@@ -13,6 +14,7 @@ interface EnrichmentPanelProps {
 /** The indicators behind an alert and what is known about each. */
 export function EnrichmentPanel({ alertId, enrichment }: EnrichmentPanelProps) {
   const enrich = useEnrichAlert(alertId);
+  const { canEdit } = usePermissions();
   const error = enrich.isError ? (
     <p className="text-error small" role="alert">
       {enrich.error.message}
@@ -25,16 +27,18 @@ export function EnrichmentPanel({ alertId, enrichment }: EnrichmentPanelProps) {
         <div className="enrichment__header">
           <h3 className="subheading">Threat intelligence</h3>
           <span className="muted small">Not checked yet.</span>
-          <button
-            type="button"
-            className="button button--secondary button--small"
-            disabled={enrich.isPending}
-            onClick={() => {
-              enrich.mutate(false);
-            }}
-          >
-            {enrich.isPending ? 'Checking…' : 'Check indicators'}
-          </button>
+          {canEdit ? (
+            <button
+              type="button"
+              className="button button--secondary button--small"
+              disabled={enrich.isPending}
+              onClick={() => {
+                enrich.mutate(false);
+              }}
+            >
+              {enrich.isPending ? 'Checking…' : 'Check indicators'}
+            </button>
+          ) : null}
         </div>
         {error}
       </section>
@@ -50,16 +54,18 @@ export function EnrichmentPanel({ alertId, enrichment }: EnrichmentPanelProps) {
           Checked {formatUtc(enrichment.enriched_at)}
           {enrichment.online ? '' : ' · local indicators only'}
         </span>
-        <button
-          type="button"
-          className="button button--secondary button--small"
-          disabled={enrich.isPending}
-          onClick={() => {
-            enrich.mutate(true);
-          }}
-        >
-          {enrich.isPending ? 'Refreshing…' : 'Refresh'}
-        </button>
+        {canEdit ? (
+          <button
+            type="button"
+            className="button button--secondary button--small"
+            disabled={enrich.isPending}
+            onClick={() => {
+              enrich.mutate(true);
+            }}
+          >
+            {enrich.isPending ? 'Refreshing…' : 'Refresh'}
+          </button>
+        ) : null}
       </div>
       {error}
       {enrichment.pending ? (

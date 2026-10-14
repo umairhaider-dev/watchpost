@@ -9,6 +9,7 @@ import {
   useUnpinEvidence,
   useUpdateCase,
 } from '../api/investigation';
+import { usePermissions } from '../api/auth';
 import type { CaseDetail, CaseStatus, Severity } from '../api/types';
 import { ActivityList } from '../components/ActivityList';
 import { AssigneeSelect } from '../components/AssigneeSelect';
@@ -26,6 +27,7 @@ const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low', 'informatio
 
 function CaseControls({ detail }: { detail: CaseDetail }) {
   const update = useUpdateCase(detail.id);
+  const { canEdit } = usePermissions();
   const [resolution, setResolution] = useState(detail.resolution ?? '');
   const statusId = useId();
   const severityId = useId();
@@ -46,7 +48,7 @@ function CaseControls({ detail }: { detail: CaseDetail }) {
           <select
             id={statusId}
             value={detail.status}
-            disabled={update.isPending}
+            disabled={!canEdit || update.isPending}
             onChange={(event) => {
               update.mutate({ status: event.target.value as CaseStatus });
             }}
@@ -65,7 +67,7 @@ function CaseControls({ detail }: { detail: CaseDetail }) {
           <select
             id={severityId}
             value={detail.severity}
-            disabled={update.isPending}
+            disabled={!canEdit || update.isPending}
             onChange={(event) => {
               update.mutate({ severity: event.target.value as Severity });
             }}
@@ -80,7 +82,7 @@ function CaseControls({ detail }: { detail: CaseDetail }) {
         <AssigneeSelect
           label="Assignee"
           value={detail.assignee?.id ?? null}
-          disabled={update.isPending}
+          disabled={!canEdit || update.isPending}
           onChange={(assigneeId) => {
             update.mutate({ assignee_id: assigneeId });
           }}
@@ -108,22 +110,25 @@ function CaseControls({ detail }: { detail: CaseDetail }) {
             className="code-input"
             rows={3}
             maxLength={20000}
-            placeholder="What happened and what was done about it"
+            placeholder={canEdit ? 'What happened and what was done about it' : undefined}
+            readOnly={!canEdit}
             value={resolution}
             onChange={(event) => {
               setResolution(event.target.value);
             }}
           />
         </div>
-        <div>
-          <button
-            type="submit"
-            className="button button--small button--secondary"
-            disabled={update.isPending || resolution.trim() === (detail.resolution ?? '')}
-          >
-            Save resolution
-          </button>
-        </div>
+        {canEdit ? (
+          <div>
+            <button
+              type="submit"
+              className="button button--small button--secondary"
+              disabled={update.isPending || resolution.trim() === (detail.resolution ?? '')}
+            >
+              Save resolution
+            </button>
+          </div>
+        ) : null}
       </form>
       {update.isError ? (
         <p className="text-error small" role="alert">
@@ -153,6 +158,7 @@ function CaseControls({ detail }: { detail: CaseDetail }) {
 
 function CaseAlerts({ detail }: { detail: CaseDetail }) {
   const unlink = useUnlinkAlert(detail.id);
+  const { canEdit } = usePermissions();
   return (
     <Card title={`Alerts (${String(detail.alerts.length)})`}>
       {detail.alerts.length === 0 ? (
@@ -189,17 +195,19 @@ function CaseAlerts({ detail }: { detail: CaseDetail }) {
                   </td>
                   <td className="mono nowrap small">{formatUtc(alert.last_seen)}</td>
                   <td>
-                    <button
-                      type="button"
-                      className="link small"
-                      aria-label={`Remove alert ${String(alert.id)} from the case`}
-                      disabled={unlink.isPending}
-                      onClick={() => {
-                        unlink.mutate(alert.id);
-                      }}
-                    >
-                      Remove
-                    </button>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        className="link small"
+                        aria-label={`Remove alert ${String(alert.id)} from the case`}
+                        disabled={unlink.isPending}
+                        onClick={() => {
+                          unlink.mutate(alert.id);
+                        }}
+                      >
+                        Remove
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -213,6 +221,7 @@ function CaseAlerts({ detail }: { detail: CaseDetail }) {
 
 function CaseEvidenceList({ detail }: { detail: CaseDetail }) {
   const unpin = useUnpinEvidence(detail.id);
+  const { canEdit } = usePermissions();
   return (
     <Card title={`Evidence (${String(detail.evidence.length)})`}>
       {detail.evidence.length === 0 ? (
@@ -230,17 +239,19 @@ function CaseEvidenceList({ detail }: { detail: CaseDetail }) {
                 <EntityLink kind="host" value={item.event.host_name} />
                 <EntityLink kind="user" value={item.event.user_name} />
                 <EntityLink kind="ip" value={item.event.source_ip} />
-                <button
-                  type="button"
-                  className="link small"
-                  aria-label={`Unpin event ${String(item.event.id)}`}
-                  disabled={unpin.isPending}
-                  onClick={() => {
-                    unpin.mutate(item.id);
-                  }}
-                >
-                  Unpin
-                </button>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    className="link small"
+                    aria-label={`Unpin event ${String(item.event.id)}`}
+                    disabled={unpin.isPending}
+                    onClick={() => {
+                      unpin.mutate(item.id);
+                    }}
+                  >
+                    Unpin
+                  </button>
+                ) : null}
               </div>
               {item.note ? <p className="small">{item.note}</p> : null}
               <pre className="code code--inline">
@@ -259,6 +270,7 @@ function CaseEvidenceList({ detail }: { detail: CaseDetail }) {
 
 function CaseNotes({ detail }: { detail: CaseDetail }) {
   const addNote = useAddNote(detail.id);
+  const { canEdit } = usePermissions();
   const [body, setBody] = useState('');
   const noteId = useId();
 
@@ -284,35 +296,37 @@ function CaseNotes({ detail }: { detail: CaseDetail }) {
           </li>
         ))}
       </ol>
-      <form className="form" onSubmit={handleSubmit}>
-        <div className="field">
-          <label htmlFor={noteId}>Add a note</label>
-          <textarea
-            id={noteId}
-            className="code-input"
-            rows={3}
-            maxLength={20000}
-            value={body}
-            onChange={(event) => {
-              setBody(event.target.value);
-            }}
-          />
-        </div>
-        <div>
-          <button
-            type="submit"
-            className="button button--small"
-            disabled={!body.trim() || addNote.isPending}
-          >
-            Add note
-          </button>
-        </div>
-        {addNote.isError ? (
-          <p className="text-error small" role="alert">
-            {addNote.error.message}
-          </p>
-        ) : null}
-      </form>
+      {canEdit ? (
+        <form className="form" onSubmit={handleSubmit}>
+          <div className="field">
+            <label htmlFor={noteId}>Add a note</label>
+            <textarea
+              id={noteId}
+              className="code-input"
+              rows={3}
+              maxLength={20000}
+              value={body}
+              onChange={(event) => {
+                setBody(event.target.value);
+              }}
+            />
+          </div>
+          <div>
+            <button
+              type="submit"
+              className="button button--small"
+              disabled={!body.trim() || addNote.isPending}
+            >
+              Add note
+            </button>
+          </div>
+          {addNote.isError ? (
+            <p className="text-error small" role="alert">
+              {addNote.error.message}
+            </p>
+          ) : null}
+        </form>
+      ) : null}
     </Card>
   );
 }

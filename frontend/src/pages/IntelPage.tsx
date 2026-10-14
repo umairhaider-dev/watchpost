@@ -1,3 +1,4 @@
+import { usePermissions } from '../api/auth';
 import { AddIocCard } from '../components/intel/AddIocCard';
 import { FeedImportCard } from '../components/intel/FeedImportCard';
 import { IntelStatsCard } from '../components/intel/IntelStatsCard';
@@ -7,6 +8,7 @@ import { ProvidersCard } from '../components/intel/ProvidersCard';
 import { PageHeader } from '../components/PageHeader';
 
 export function IntelPage() {
+  const { canEdit } = usePermissions();
   return (
     <>
       <PageHeader
@@ -20,8 +22,12 @@ export function IntelPage() {
         </div>
         <div className="stack stack--flush">
           <LookupCard />
-          <FeedImportCard />
-          <AddIocCard />
+          {canEdit ? (
+            <>
+              <FeedImportCard />
+              <AddIocCard />
+            </>
+          ) : null}
           <ProvidersCard />
         </div>
       </div>

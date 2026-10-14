@@ -1,5 +1,6 @@
 import { Fragment, useId, useState } from 'react';
 
+import { usePermissions } from '../../api/auth';
 import { type IocFilters, useDeleteIoc, useIoc, useIocs, useUpdateIoc } from '../../api/queries';
 import type { Ioc, IocType } from '../../api/types';
 import { formatNumber, formatUtc } from '../../lib/format';
@@ -82,6 +83,7 @@ export function IocTable() {
   const iocs = useIocs(filters);
   const update = useUpdateIoc();
   const remove = useDeleteIoc();
+  const { canEdit } = usePermissions();
   const typeId = useId();
   const items = iocs.data?.items ?? [];
   const mutationError = update.error ?? remove.error;
@@ -184,7 +186,7 @@ export function IocTable() {
                         <Switch
                           checked={ioc.is_active}
                           label={`${ioc.is_active ? 'Deactivate' : 'Activate'} ${ioc.value}`}
-                          disabled={update.isPending}
+                          disabled={!canEdit || update.isPending}
                           onChange={(active) => {
                             update.mutate({ id: ioc.id, is_active: active });
                           }}
@@ -219,17 +221,19 @@ export function IocTable() {
                         )}
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          className="link small"
-                          aria-label={`Delete ${ioc.value}`}
-                          disabled={remove.isPending}
-                          onClick={() => {
-                            confirmDelete(ioc);
-                          }}
-                        >
-                          Delete
-                        </button>
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            className="link small"
+                            aria-label={`Delete ${ioc.value}`}
+                            disabled={remove.isPending}
+                            onClick={() => {
+                              confirmDelete(ioc);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                     {isOpen ? (

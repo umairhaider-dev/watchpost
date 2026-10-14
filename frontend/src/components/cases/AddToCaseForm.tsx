@@ -1,6 +1,7 @@
 import { type SubmitEvent, useId, useState } from 'react';
 import { Link } from 'react-router';
 
+import { usePermissions } from '../../api/auth';
 import { useCases, useCreateCase, useLinkAlerts } from '../../api/investigation';
 
 interface AddToCaseFormProps {
@@ -16,6 +17,7 @@ const NEW_CASE = 'new';
 export function AddToCaseForm({ alertIds, defaultTitle = '', onDone }: AddToCaseFormProps) {
   const cases = useCases({ status: 'active', assignee: '', q: '' });
   const link = useLinkAlerts();
+  const { canEdit } = usePermissions();
   const create = useCreateCase();
   const [target, setTarget] = useState(NEW_CASE);
   const [title, setTitle] = useState(defaultTitle);
@@ -55,6 +57,8 @@ export function AddToCaseForm({ alertIds, defaultTitle = '', onDone }: AddToCase
       );
     }
   }
+
+  if (!canEdit) return null;
 
   return (
     <form className="inline-form" onSubmit={handleSubmit} aria-label="Add to case">

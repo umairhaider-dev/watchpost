@@ -1,3 +1,4 @@
+import { usePermissions } from '../../api/auth';
 import { useIntelSummary, useSweepIndicators } from '../../api/queries';
 import type { IocType } from '../../api/types';
 import { formatNumber } from '../../lib/format';
@@ -7,6 +8,7 @@ import { Card } from '../Card';
 export function IntelStatsCard() {
   const summary = useIntelSummary();
   const sweep = useSweepIndicators();
+  const { canEdit } = usePermissions();
   const data = summary.data;
   const byType = data
     ? (Object.entries(data.by_type) as [IocType, number][])
@@ -41,28 +43,30 @@ export function IntelStatsCard() {
           {byType ? <p className="muted small">{byType}</p> : null}
         </>
       ) : null}
-      <div className="inline-field">
-        <button
-          type="button"
-          className="button button--secondary"
-          disabled={sweep.isPending}
-          onClick={() => {
-            sweep.mutate();
-          }}
-        >
-          Re-check stored events
-        </button>
-        {sweep.isSuccess ? (
-          <span className="muted small" role="status">
-            Queued: every stored event will be checked against the active indicators.
-          </span>
-        ) : null}
-        {sweep.isError ? (
-          <span className="text-error small" role="alert">
-            {sweep.error.message}
-          </span>
-        ) : null}
-      </div>
+      {canEdit ? (
+        <div className="inline-field">
+          <button
+            type="button"
+            className="button button--secondary"
+            disabled={sweep.isPending}
+            onClick={() => {
+              sweep.mutate();
+            }}
+          >
+            Re-check stored events
+          </button>
+          {sweep.isSuccess ? (
+            <span className="muted small" role="status">
+              Queued: every stored event will be checked against the active indicators.
+            </span>
+          ) : null}
+          {sweep.isError ? (
+            <span className="text-error small" role="alert">
+              {sweep.error.message}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </Card>
   );
 }

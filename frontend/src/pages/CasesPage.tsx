@@ -7,6 +7,7 @@ import {
   useCases,
   useCreateCase,
 } from '../api/investigation';
+import { usePermissions } from '../api/auth';
 import type { Severity } from '../api/types';
 import { Card } from '../components/Card';
 import { PageHeader } from '../components/PageHeader';
@@ -107,6 +108,7 @@ export function CasesPage() {
   const [filters, setFilters] = useState<CaseFilters>({ status: 'active', assignee: '', q: '' });
   const cases = useCases(filters);
   const users = useAssignableUsers();
+  const { canEdit } = usePermissions();
   const statusId = useId();
   const assigneeId = useId();
   const names = new Map(users.data?.map((user) => [user.id, user.username]));
@@ -234,7 +236,7 @@ export function CasesPage() {
             </div>
           ) : null}
         </Card>
-        <NewCaseForm />
+        {canEdit ? <NewCaseForm /> : null}
       </div>
     </>
   );

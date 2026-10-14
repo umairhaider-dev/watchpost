@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
+import { usePermissions } from '../api/auth';
 import { useRule, useSaveRule, useToggleRule, useValidateRule } from '../api/queries';
 import type { RuleDetail } from '../api/types';
 import { Card } from '../components/Card';
@@ -18,6 +19,7 @@ const TYPE_LABELS: Record<RuleDetail['rule_type'], string> = {
 
 function RuleFacts({ rule }: { rule: RuleDetail }) {
   const toggle = useToggleRule();
+  const { isAdmin } = usePermissions();
 
   return (
     <Card
@@ -28,7 +30,7 @@ function RuleFacts({ rule }: { rule: RuleDetail }) {
           <Switch
             checked={rule.enabled}
             label={`${rule.enabled ? 'Disable' : 'Enable'} this rule`}
-            disabled={toggle.isPending}
+            disabled={!isAdmin || toggle.isPending}
             onChange={(enabled) => {
               toggle.mutate({ id: rule.id, enabled });
             }}
@@ -122,6 +124,7 @@ function RuleEditor({
 }) {
   const save = useSaveRule(rule.id);
   const validate = useValidateRule();
+  const { canEdit, isAdmin } = usePermissions();
   const editorId = useId();
   const dirty = source !== rule.source_yaml;
 
@@ -135,6 +138,7 @@ function RuleEditor({
         className="code-input"
         rows={24}
         spellCheck={false}
+        readOnly={!canEdit}
         value={source}
         onChange={(event) => {
           onChange(event.target.value);
@@ -142,45 +146,55 @@ function RuleEditor({
           save.reset();
         }}
       />
-      {rule.origin === 'builtin' && dirty ? (
+      {canEdit && !isAdmin ? (
+        <p className="muted small">
+          You can change the YAML here to validate and test it, but only admins can save rule
+          changes.
+        </p>
+      ) : null}
+      {isAdmin && rule.origin === 'builtin' && dirty ? (
         <p className="muted small">
           Saving marks this built-in rule as edited, so future rule updates will not overwrite your
           changes.
         </p>
       ) : null}
-      <div className="inline-field">
-        <button
-          type="button"
-          className="button button--secondary"
-          disabled={validate.isPending}
-          onClick={() => {
-            validate.mutate(source);
-          }}
-        >
-          Validate
-        </button>
-        <button
-          type="button"
-          className="button"
-          disabled={!dirty || save.isPending}
-          onClick={() => {
-            save.mutate(source);
-          }}
-        >
-          {save.isPending ? 'Saving…' : 'Save changes'}
-        </button>
-        {dirty ? (
+      {canEdit ? (
+        <div className="inline-field">
           <button
             type="button"
             className="button button--secondary"
+            disabled={validate.isPending}
             onClick={() => {
-              onChange(rule.source_yaml);
+              validate.mutate(source);
             }}
           >
-            Discard
+            Validate
           </button>
-        ) : null}
-      </div>
+          {isAdmin ? (
+            <button
+              type="button"
+              className="button"
+              disabled={!dirty || save.isPending}
+              onClick={() => {
+                save.mutate(source);
+              }}
+            >
+              {save.isPending ? 'Saving…' : 'Save changes'}
+            </button>
+          ) : null}
+          {dirty ? (
+            <button
+              type="button"
+              className="button button--secondary"
+              onClick={() => {
+                onChange(rule.source_yaml);
+              }}
+            >
+              {isAdmin ? 'Discard' : 'Reset'}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {validate.data ? (
         <p className={validate.data.valid ? 'text-ok' : 'text-error'} role="status">
           {validate.data.valid ? 'The rule is valid.' : validate.data.error}
@@ -203,12 +217,13 @@ function RuleEditor({
 function RuleWorkspace({ rule }: { rule: RuleDetail }) {
   // Keyed by version in the parent, so a save resets the editor to the saved text.
   const [source, setSource] = useState(rule.source_yaml);
+  const { canEdit } = usePermissions();
 
   return (
     <div className="rule-layout">
       <div className="stack stack--flush">
         <RuleFacts rule={rule} />
-        <RuleTestPanel sourceYaml={source} />
+        {canEdit ? <RuleTestPanel sourceYaml={source} /> : null}
       </div>
       <RuleEditor rule={rule} source={source} onChange={setSource} />
     </div>
