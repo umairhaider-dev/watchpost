@@ -8,8 +8,8 @@ cases.
 It is a defensive tool only: it reads and analyses logs and never scans, probes or
 modifies other systems.
 
-> **Status:** foundation, log ingestion, the detection engine and threat intelligence
-> are in place. Case management is being built on top of them.
+> **Status:** log ingestion, detection, threat intelligence, alert triage and case
+> management are in place. A metrics dashboard and sign-in with roles come next.
 
 ## Architecture
 
@@ -65,6 +65,13 @@ docker compose up --build
 
 All ports bind to `127.0.0.1` only. Set `WATCHPOST_ENV=production` and a real
 `WATCHPOST_SECRET_KEY` before exposing the stack anywhere.
+
+Create an analyst account so alerts and cases can be assigned (you are asked for the
+password twice; it must be at least 12 characters):
+
+```bash
+docker compose exec api watchpost create-user analyst.one --role analyst --full-name "Analyst One"
+```
 
 ## Normalised event schema
 
@@ -312,7 +319,7 @@ Adding, importing or re-enabling indicators queues a **sweep** over stored event
 activity from before the indicator was known is flagged too. The sweep then runs the
 *Threat intel indicator match* rule over just the period with new matches. Deleting an
 indicator clears the flag on events that no other indicator matches. Events can be
-filtered to matches on the **Events** page.
+filtered to matches on the **Event search** page (or with `threat.matched:true`).
 
 ### Alert enrichment
 
@@ -349,6 +356,86 @@ Online lookups are limited in three ways:
 The "new address" rule uses IP addresses; country-level detection needs a GeoIP
 database, which is not bundled so the platform can run fully offline.
 
+## Investigation
+
+### Alert triage
+
+The **Alerts** queue filters by severity, status, rule, host, source IP, user, ATT&CK
+technique, assignee and the period the alert was active, and sorts by latest activity,
+severity or first seen. Select alerts to change their status or assignee together, or to
+put them into a case.
+
+An alert moves from **new** to **investigating** and ends as **true positive**,
+**false positive** or **closed**. Ending it records when it was resolved; reopening
+clears that. Only one open alert can exist per rule and entity (that is how repeated
+hits are grouped), so reopening an alert is refused while a newer open alert already
+tracks the same activity.
+
+Each alert has its own page with the rule's notes, the threat intelligence panel, the
+evidence events, the history of every status change and assignment, and a **timeline**:
+all events that share the alert's host, IP address or user from a window before its
+first event to the same window after its last (30 minutes by default, up to 24 hours),
+with the evidence highlighted.
+
+### Cases
+
+A case groups related alerts into one investigation. Open one from selected alerts in
+the queue or from the **Cases** page; its severity defaults to the highest among its
+alerts. Linking a new alert moves it to investigating, and an alert belongs to one case
+at a time.
+
+A case moves through **open**, **in progress**, **resolved** and **closed**, with the
+resolved and closed times recorded and a resolution text. Analysts add notes and **pin
+events as evidence** (from the event search or an alert timeline), each with a note on
+why it matters. Every change is written to the audit log, which is also the case's
+activity history.
+
+The case report can be downloaded as **Markdown** (lossless) or **PDF**. Both contain
+the summary, resolution, ATT&CK techniques, entities, alerts, evidence, notes and
+activity. The PDF uses the standard PDF fonts, so characters outside Latin-1 are shown
+as their closest ASCII form or `?`.
+
+### Event search
+
+The **Event search** page takes a query and a time range, returns the newest events first
+and pages through any number of results at the same speed (keyset pagination).
+
+| Query | Matches |
+| --- | --- |
+| `user.name:root` | keyword fields match exactly and are case-sensitive, so their indexes are used |
+| `host:web-*` | `*` and `?` are wildcards; patterns are case-insensitive |
+| `process.command_line:mimikatz` | text fields (command line, URL, message, ...) match a case-insensitive substring |
+| `source.ip:10.0.0.0/8` | IP fields take an address or a CIDR network |
+| `ip:203.0.113.45` | either the source or the destination address |
+| `status:>=500` | numbers and timestamps compare with `>`, `>=`, `<`, `<=` |
+| `@timestamp:2026-10-12` | a bare date is that whole UTC day |
+| `threat.matched:true` | events that matched a threat indicator |
+| `destination.ip:*` | the field is present |
+| `raw.event_data.TargetImage:*lsass*` | a path into the original record |
+| `"Failed password"` | free text in the message, command line and URL |
+
+Terms combine with `AND` (or a space), `OR`, `NOT` or a leading `-`, and parentheses.
+Short names work for common fields (`host`, `user`, `action`, `outcome`, `url`, `status`,
+`method`, `process`). `NOT` also matches events where the field is missing. Mistakes are
+reported with their position, and an unknown field name gets a suggestion. Values are
+always bound as parameters, never spliced into SQL.
+
+### Entities and the ATT&CK matrix
+
+Every host, user and IP address in the UI links to its **entity page**:
+
+- how many events involve it, and when it was first and last seen
+- events per day and its log sources
+- the users, hosts or addresses it was seen with most
+- local threat intel for an address
+- its alerts, and the cases they belong to
+
+An IP address matches as either end of a connection.
+
+The **ATT&CK matrix** lays out the techniques the rules cover by tactic. Techniques
+that raised alerts in the chosen period are highlighted and link to those alerts, and
+the matrix also shows which techniques have only disabled rules.
+
 ## Data model
 
 | Table | Purpose |
@@ -358,12 +445,13 @@ database, which is not bundled so the platform can run fully offline.
 | `detection_runs` | One row per pass of the rules over an ingestion job's events, a time range, or the period with new threat-intel matches, with what it scanned and the alerts it created or updated. |
 | `alerts` | Rule hits. A partial unique index on `group_key` for open alerts makes repeated hits update one alert instead of creating hundreds. |
 | `alert_events` | Links alerts to the evidence events behind them. |
-| `cases` / `case_notes` | Investigations that group alerts, with assignee, status, timestamps and analyst notes. |
+| `cases` / `case_notes` | Investigations that group alerts, with assignee, status, resolved and closed times, resolution and analyst notes. |
+| `case_evidence` | Events pinned to a case as evidence, with the analyst's note. |
 | `iocs` | Local threat-intel store of IPs, domains and file hashes, with source, confidence, tags and optional expiry. |
 | `event_ioc_matches` | Which indicator matched which event, and in which field. `events.ioc_matched` is the indexed flag for filtering. |
 | `enrichment_cache` | Answers from online providers per indicator, reused until they expire. |
-| `users` | Analysts, admins and viewers. |
-| `audit_log` | Append-only record of analyst actions. |
+| `users` | Analysts, admins and viewers, with Argon2id password hashes. |
+| `audit_log` | Append-only record of analyst actions; also the activity history of alerts and cases. |
 | `ingestion_jobs` | One row per uploaded or watched file: status, progress, inserted/duplicate/malformed counts and the first malformed records. |
 
 Enum-like columns are `VARCHAR` with `CHECK` constraints rather than native PostgreSQL
@@ -428,6 +516,9 @@ backend/
     ingestion/   readers, parsers, batch pipeline, job runner, folder watcher
     detection/   rule schema, matchers, conditions, engine, runner, rule sync
     intel/       indicator parsing, feeds, matching, sweeps, providers, enrichment
+    investigation/  alert triage, cases, timelines, entity profiles, ATT&CK matrix, reports
+    search/      the event query language: parser and SQL compiler
+    accounts.py, audit.py, cli.py   users, the audit trail and the `watchpost` command
     api/         FastAPI app factory, middleware, dependencies, routes
     worker/      arq settings, queue and jobs
   alembic/       migrations
