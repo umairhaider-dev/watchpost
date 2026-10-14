@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.datastructures import State
 
 from watchpost.core.config import Settings
+from watchpost.db.models import User
 from watchpost.intel.enrichment import Enricher
 from watchpost.worker.queue import JobQueue
 
@@ -78,8 +79,18 @@ def get_enricher(resources: Annotated[AppResources, Depends(get_resources)]) -> 
     return resources.enricher
 
 
+async def current_user() -> User | None:
+    """The user making the request.
+
+    There is no sign-in yet, so every request is anonymous and actions are
+    recorded without a user.
+    """
+    return None
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 RedisDep = Annotated[RedisPinger, Depends(get_redis)]
 QueueDep = Annotated[JobQueue, Depends(get_queue)]
 EnricherDep = Annotated[Enricher, Depends(get_enricher)]
+ActorDep = Annotated[User | None, Depends(current_user)]
