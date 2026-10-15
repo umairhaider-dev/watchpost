@@ -105,7 +105,8 @@ def _ip(column: ColumnElement[Any], term: Term) -> ColumnElement[bool]:
     try:
         if "/" in term.value:
             network = ipaddress.ip_network(term.value, strict=False)
-            return cast(column, INET).op("<<=")(cast(str(network), CIDR))
+            # is_comparison makes the result a boolean, so NOT can wrap it.
+            return cast(column, INET).op("<<=", is_comparison=True)(cast(str(network), CIDR))
         return column == str(ipaddress.ip_address(term.value))
     except ValueError as exc:
         msg = f"{term.value!r} is not an IP address or network"

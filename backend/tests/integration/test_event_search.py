@@ -132,6 +132,7 @@ async def search(session: AsyncSession, ids: dict[str, int], query: str) -> list
         # IP addresses and networks
         ("source.ip:198.51.100.23", ["admin_probe", "server_error"]),
         ("source.ip:10.0.0.0/8", ["backup_success"]),
+        ("status:404 AND NOT source.ip:10.0.0.0/8", ["admin_probe"]),
         ("ip:203.0.113.0/24", ["root_failure", "lsass_read"]),
         ("destination.ip:*", ["lsass_read"]),
         # numbers and comparisons
