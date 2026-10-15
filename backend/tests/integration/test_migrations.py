@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from tests.conftest import run_alembic
 from watchpost.db.base import Base
 
-HEAD_REVISION = "0007"
+HEAD_REVISION = "0008"
 
 EXPECTED_TABLES = {
     "alembic_version",

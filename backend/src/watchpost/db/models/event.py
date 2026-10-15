@@ -93,6 +93,15 @@ class Event(Base):
             "timestamp",
             postgresql_where=text("ioc_matched"),
         ),
+        # Substring searches for rare tool names (``process.command_line:sekurlsa``)
+        # would otherwise read the whole table. Only process events have a
+        # command line, so the index stays small.
+        Index(
+            "ix_events_command_line_trgm",
+            "process_command_line",
+            postgresql_using="gin",
+            postgresql_ops={"process_command_line": "gin_trgm_ops"},
+        ),
     )
 
     def __repr__(self) -> str:
