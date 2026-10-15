@@ -2,19 +2,21 @@
 
 :func:`parse_events` is a synchronous generator (parsing is CPU-bound) that
 yields normalised events and records every malformed or skipped record in a
-:class:`ParseStats`. :func:`insert_events` writes one batch with
+:class:`ParseStats`. :func:`insert_events` writes one batch: it copies the
+rows into a temporary table with ``COPY`` and moves them into ``events`` with
 ``ON CONFLICT DO NOTHING`` on the event hash, so re-ingesting a file is safe
 and the number of duplicates is exact.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Iterator, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from watchpost.db.models import Event
@@ -144,11 +146,36 @@ def take_rows(
     return rows
 
 
-_INSERT_EVENTS = (
-    pg_insert(Event)
-    .on_conflict_do_nothing(index_elements=[Event.event_hash])
-    .returning(Event.id, Event.event_hash)
+# Every column the ingestion pipeline fills; ``id`` and ``ingested_at`` come from the database.
+_COLUMNS: tuple[str, ...] = tuple(
+    column.name for column in Event.__table__.columns if column.name not in {"id", "ingested_at"}
 )
+_COLUMN_LIST = ", ".join(_COLUMNS)
+_STAGE = "event_stage"
+# The statements below are built from the table definition only; row values
+# always travel separately through COPY.
+_CREATE_STAGE = text(
+    f"CREATE TEMPORARY TABLE IF NOT EXISTS {_STAGE} AS "  # noqa: S608
+    f"SELECT {_COLUMN_LIST} FROM events WITH NO DATA"
+)
+_MOVE_STAGED = text(
+    f"INSERT INTO events ({_COLUMN_LIST}) SELECT {_COLUMN_LIST} FROM {_STAGE} "  # noqa: S608
+    "ON CONFLICT (event_hash) DO NOTHING RETURNING id, event_hash"
+)
+# Temporary tables are never vacuumed, so the stage is truncated, not deleted from.
+_CLEAR_STAGE = text(f"TRUNCATE {_STAGE}")
+
+
+def _copy_record(row: dict[str, Any]) -> tuple[Any, ...]:
+    record = []
+    for column in _COLUMNS:
+        value = row.get(column)
+        if column == "raw_event":
+            value = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+        elif column == "ioc_matched":
+            value = bool(value)
+        record.append(value)
+    return tuple(record)
 
 
 async def insert_events(
@@ -156,10 +183,29 @@ async def insert_events(
 ) -> list[tuple[int, str]]:
     """Insert a batch, skipping events whose hash already exists.
 
+    ``COPY`` into a per-connection temporary table followed by one
+    ``INSERT ... SELECT`` is several times faster than a multi-row ``INSERT``
+    and keeps the deduplication on the event hash. Everything happens inside
+    the session's transaction.
+
     Returns:
         ``(id, event_hash)`` for the rows actually inserted; the rest were duplicates.
     """
     if not rows:
         return []
-    result = await session.execute(_INSERT_EVENTS, list(rows))
-    return [(event_id, event_hash) for event_id, event_hash in result]
+    # Going through the session first also starts its transaction on the connection.
+    await session.execute(_CREATE_STAGE)
+    connection = await session.connection()
+    raw = await connection.get_raw_connection()
+    driver = raw.driver_connection
+    if driver is None:  # pragma: no cover - the pool hands out open connections
+        msg = "the database connection is closed"
+        raise RuntimeError(msg)
+    # COPY is specific to the driver: asyncpg's copy_records_to_table.
+    await driver.copy_records_to_table(
+        _STAGE, records=[_copy_record(row) for row in rows], columns=_COLUMNS
+    )
+    result = await session.execute(_MOVE_STAGED)
+    stored = [(int(event_id), str(event_hash)) for event_id, event_hash in result]
+    await session.execute(_CLEAR_STAGE)
+    return stored

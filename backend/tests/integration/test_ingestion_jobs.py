@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import gzip
+import io
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from watchpost.core.config import Settings
 from watchpost.db.models import Event, IngestionJob, IngestOrigin, IngestStatus
 from watchpost.ingestion.jobs import run_ingestion_job
+from watchpost.ingestion.parsers import ParseContext, get_parser
+from watchpost.ingestion.pipeline import ParseStats, insert_events, parse_events, take_rows
 
 SAMPLES = Path(__file__).resolve().parents[3] / "samples"
 
@@ -269,3 +273,25 @@ async def test_finished_or_missing_jobs_are_skipped(
     assert await run_ingestion_job(session_factory, app_settings, job.id) is None
     assert await run_ingestion_job(session_factory, app_settings, 999_999) is None
     assert path.exists()
+
+
+async def test_batch_insert_skips_repeats_and_keeps_raw_records(db_session: AsyncSession) -> None:
+    lines = (SAMPLES / "auth.log").read_bytes().splitlines(keepends=True)[:6]
+    parser = get_parser("linux_auth")(
+        ParseContext(reference_time=datetime(2026, 10, 12, tzinfo=UTC), default_host=None)
+    )
+    rows = take_rows(parse_events(io.BytesIO(b"".join(lines)), parser, ParseStats()), 100)
+    rows[1]["ioc_matched"] = True
+    # The same event twice in one batch is stored once.
+    first = await insert_events(db_session, [*rows, dict(rows[0])])
+    second = await insert_events(db_session, rows[:3])
+
+    assert (len(first), len(second)) == (6, 0)
+    assert {event_hash for _, event_hash in first} == {row["event_hash"] for row in rows}
+    stored = await db_session.scalar(select(Event).where(Event.id == first[1][0]))
+    assert stored is not None
+    assert stored.ioc_matched is True
+    assert isinstance(stored.raw_event, dict)
+    assert stored.raw_event == rows[1]["raw_event"]
+    # The staging table is emptied after every batch.
+    assert await db_session.scalar(text("SELECT count(*) FROM event_stage")) == 0
