@@ -293,11 +293,34 @@ def _match_steps(
 # --------------------------------------------------------------------------
 
 
-@dataclass(frozen=True, slots=True)
-class _Seen:
-    timestamp: datetime
-    event_id: int
-    value: str
+_Key = tuple[datetime, int]
+
+
+@dataclass(slots=True)
+class _History:
+    """One entity's past values, sorted by (timestamp, event id), overall and per value."""
+
+    keys: list[_Key] = field(default_factory=list)
+    by_value: dict[str, list[_Key]] = field(default_factory=lambda: defaultdict(list))
+
+    def add(self, key: _Key, value: str) -> None:
+        self.keys.append(key)
+        self.by_value[value].append(key)
+
+    def sort(self) -> None:
+        self.keys.sort()
+        for keys in self.by_value.values():
+            keys.sort()
+
+    def seen_within(self, row_key: _Key, earliest: datetime, value: str | None = None) -> bool:
+        """Whether anything (or ``value``) was seen before ``row_key`` and since ``earliest``.
+
+        Only the latest earlier entry matters, so this is one binary search
+        instead of a walk over the whole lookback window.
+        """
+        keys = self.keys if value is None else self.by_value.get(value, [])
+        index = bisect.bisect_left(keys, row_key)
+        return index > 0 and keys[index - 1][0] >= earliest
 
 
 def evaluate_new_value(
@@ -315,21 +338,18 @@ def evaluate_new_value(
         msg = f"rule {rule.id} has no new_value settings"
         raise ValueError(msg)
 
-    seen_by_entity: dict[tuple[str | None, ...], list[_Seen]] = defaultdict(list)
+    histories: dict[tuple[str | None, ...], _History] = defaultdict(_History)
     for row in history:
         if not rule.matches(row):
             continue
         value = resolve_value(row)
         if value is not None:
-            seen = _Seen(row["timestamp"], int(row["id"]), str(value))
-            seen_by_entity[rule.group_values(row)].append(seen)
-    for entries in seen_by_entity.values():
-        entries.sort(key=lambda seen: (seen.timestamp, seen.event_id))
-    times_by_entity = {
-        entity: [seen.timestamp for seen in entries] for entity, entries in seen_by_entity.items()
-    }
+            histories[rule.group_values(row)].add((row["timestamp"], int(row["id"])), str(value))
+    for entity_history in histories.values():
+        entity_history.sort()
 
     value_field = spec.field
+    empty = _History()
     builders: dict[tuple[tuple[str | None, ...], str], _HitBuilder] = {}
     for row in targets:
         if not rule.matches(row):
@@ -339,10 +359,13 @@ def evaluate_new_value(
         if raw_value is None or any(value is None for value in entity):
             continue
         value = str(raw_value)
-        prior = _prior_values(
-            seen_by_entity.get(entity, []), times_by_entity.get(entity, []), row, spec.lookback
-        )
-        if (spec.require_history and not prior) or value in prior:
+        timestamp: datetime = row["timestamp"]
+        row_key = (timestamp, int(row["id"]))
+        earliest = timestamp - spec.lookback
+        past = histories.get(entity, empty)
+        if (spec.require_history and not past.seen_within(row_key, earliest)) or past.seen_within(
+            row_key, earliest, value
+        ):
             continue
         key = (entity, value)
         builder = builders.get(key)
@@ -351,21 +374,6 @@ def evaluate_new_value(
             builder = builders[key] = _HitBuilder(rule.id, group)
         builder.add(row)
     return [builder.build() for builder in builders.values()]
-
-
-def _prior_values(
-    entries: Sequence[_Seen], times: Sequence[datetime], row: EventRow, lookback: timedelta
-) -> set[str]:
-    """Values seen strictly before ``row`` and no earlier than ``lookback`` before it."""
-    timestamp: datetime = row["timestamp"]
-    event_id = int(row["id"])
-    start = bisect.bisect_left(times, timestamp - lookback)
-    values: set[str] = set()
-    for seen in entries[start:]:
-        if (seen.timestamp, seen.event_id) >= (timestamp, event_id):
-            break
-        values.add(seen.value)
-    return values
 
 
 # --------------------------------------------------------------------------
