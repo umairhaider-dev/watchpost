@@ -10,7 +10,9 @@ uses the same dotted names as the rule YAML (``source.ip``,
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from enum import Enum
 from ipaddress import IPv4Address, IPv6Address
+from operator import attrgetter
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress, field_validator
@@ -139,8 +141,23 @@ class NormalizedEvent(BaseModel):
         return flat
 
     def to_row(self) -> dict[str, Any]:
-        """Return a dict ready for a bulk insert into the ``events`` table."""
-        row = {spec.column: self.get(spec) for spec in FIELDS}
+        """Return a dict ready for a bulk insert into the ``events`` table.
+
+        Same values as :meth:`get` for every field, but with the attribute
+        lookups prepared once: this runs for every event ingested.
+        """
+        row: dict[str, Any] = {}
+        for column, getter in _ROW_GETTERS:
+            value = getter(self)
+            if isinstance(value, Enum):
+                value = value.value
+            elif isinstance(value, IPv4Address | IPv6Address):
+                value = str(value)
+            row[column] = value
         row["event_hash"] = self.event_hash
         row["raw_event"] = self.raw_event
         return row
+
+
+# Every section of NormalizedEvent always exists, so dotted lookups never meet None.
+_ROW_GETTERS = tuple((spec.column, attrgetter(".".join(spec.path))) for spec in FIELDS)

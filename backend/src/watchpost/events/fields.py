@@ -8,7 +8,7 @@ cannot drift apart.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 
@@ -31,11 +31,12 @@ class FieldSpec:
     column: str
     kind: FieldKind
     description: str
+    # Attribute path inside NormalizedEvent (``@timestamp`` -> ``timestamp``),
+    # worked out once because ingestion looks it up for every field of every event.
+    path: tuple[str, ...] = field(init=False, repr=False, compare=False)
 
-    @property
-    def path(self) -> tuple[str, ...]:
-        """Attribute path inside :class:`NormalizedEvent` (``@timestamp`` -> ``timestamp``)."""
-        return tuple(self.name.removeprefix("@").split("."))
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "path", tuple(self.name.removeprefix("@").split(".")))
 
 
 FIELDS: tuple[FieldSpec, ...] = (
