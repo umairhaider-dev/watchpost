@@ -137,10 +137,19 @@ def ssh_session(
     return end
 
 
+# A person mistypes now and then, not every few minutes, however many events are generated.
+TYPO_COOLDOWN_SECONDS = 6 * 3600
+
+
 def mistyped_password(rng: random.Random, now: float, out: Timeline) -> None:
     """One or two wrong passwords, then the right one: a person, not a tool."""
     user = rng.choice(LINUX_USERS)
     host = rng.choice(LINUX_HOSTS)
+    key = f"typo:{user.name}"
+    if now - out.last_seen.get(key, float("-inf")) < TYPO_COOLDOWN_SECONDS:
+        ssh_session(rng, now, out, user=user, host=host)
+        return
+    out.last_seen[key] = now
     sshd, port = _pid(rng), _port(rng)
     at = now
     for _ in range(rng.randint(1, 2)):

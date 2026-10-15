@@ -21,6 +21,9 @@ class Timeline:
     def __init__(self) -> None:
         self._heap: list[tuple[float, int, str, bool]] = []
         self._order = itertools.count()
+        # What activities need to remember while one file is written, such as
+        # when each person last mistyped a password.
+        self.last_seen: dict[str, float] = {}
 
     def add(self, timestamp: float, line: str, *, fixed: bool = False) -> None:
         """Schedule ``line``. Fixed lines (attack scenarios) are always written."""

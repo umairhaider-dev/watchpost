@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -124,6 +124,28 @@ def test_same_seed_same_logs(tmp_path: Path) -> None:
     assert (tmp_path / "a" / "access.log").read_bytes() != (
         tmp_path / "c" / "access.log"
     ).read_bytes()
+
+
+def test_typos_never_look_like_a_brute_force(tmp_path: Path) -> None:
+    # A dense day: many sessions per person per hour.
+    generate(GeneratorConfig(events=60_000, days=1, end=END, seed=3), tmp_path)
+    parser = get_parser("linux_auth")(ParseContext(reference_time=END, default_host=None))
+    failures: dict[str, list[datetime]] = {}
+    with LogFile.open(tmp_path / "auth.log") as log_file:
+        for event in parse_events(log_file.stream, parser, ParseStats()):
+            if event.event.action == "ssh_login" and event.event.outcome == "failure":
+                failures.setdefault(str(event.source.ip), []).append(event.timestamp)
+
+    busiest = {
+        address: max(
+            sum(1 for other in times if timedelta(0) <= other - start <= timedelta(minutes=15))
+            for start in times
+        )
+        for address, times in failures.items()
+    }
+    attacker = busiest.pop("203.0.113.45")
+    assert attacker >= 10
+    assert busiest and max(busiest.values()) <= 2
 
 
 def test_people_log_in_from_one_address_each() -> None:
