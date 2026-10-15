@@ -103,6 +103,19 @@ def compile_field_test(key: str, expected: Any) -> Predicate:
     return predicate
 
 
+def plain_needles(values: list[Any]) -> list[str] | None:
+    """Lower-cased literals for plain string values; ``None`` if any value is not one."""
+    needles: list[str] = []
+    for value in values:
+        if value is None or isinstance(value, dict | list):
+            return None
+        literal, has_wildcards = _unescape(_text(value))
+        if has_wildcards:
+            return None
+        needles.append(literal.lower())
+    return needles
+
+
 def _compile_value(key: str, value: Any, modifiers: list[str]) -> ValueTest:
     kinds = [modifier for modifier in modifiers if modifier in _VALUE_KINDS]
     if len(kinds) > 1:

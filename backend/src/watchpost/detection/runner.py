@@ -61,6 +61,7 @@ from watchpost.detection.engine import (
     evaluate_threshold,
 )
 from watchpost.detection.fields import EventRow
+from watchpost.detection.prefilter import any_rule_filter, rule_columns, rule_filter
 from watchpost.detection.store import load_compiled_rules
 from watchpost.events import FIELDS_BY_NAME
 
@@ -247,6 +248,9 @@ async def _detect_windows(
             _EVENTS.c.timestamp >= first - widest,
             _EVENTS.c.timestamp <= last + widest,
         )
+        relevant = any_rule_filter(group)
+        if relevant is not None:
+            query = query.where(relevant)
         kept: dict[str, list[EventRow]] = defaultdict(list)
         async for rows in stream_rows(session_factory, query):
             await asyncio.to_thread(_keep_relevant, group, rows, kept)
@@ -268,9 +272,15 @@ async def _detect_new_values(
             continue
         first = min(row["timestamp"] for row in rule_targets)
         last = max(row["timestamp"] for row in rule_targets)
-        query = _source_filter(select(_EVENTS), rule.log_sources).where(
+        # The history can be long (30 days by default): read only what the rule needs.
+        columns = rule_columns(rule)
+        base = select(*columns) if columns is not None else select(_EVENTS)
+        query = _source_filter(base, rule.log_sources).where(
             _EVENTS.c.timestamp >= first - spec.lookback, _EVENTS.c.timestamp <= last
         )
+        relevant = rule_filter(rule)
+        if relevant is not None:
+            query = query.where(relevant)
         # Narrow the history to the entities involved when that maps to a column.
         if len(rule.group_fields) == 1 and rule.group_fields[0] in FIELDS_BY_NAME:
             column = _EVENTS.c[FIELDS_BY_NAME[rule.group_fields[0]].column]
