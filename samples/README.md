@@ -19,3 +19,7 @@ Uploading the same file twice inserts nothing new: every event is
 deduplicated by its hash. Together the files trigger every built-in detection rule;
 the indicator match rule needs `iocs.csv` to be imported first. The order does not
 matter: indicators imported after the logs are matched by a sweep over stored events.
+
+For a larger and more realistic data set, with these attacks hidden in a week of normal
+activity, use `watchpost generate-logs` (see "Sample data and attack scenarios" in the
+main README).

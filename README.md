@@ -8,9 +8,48 @@ cases.
 It is a defensive tool only: it reads and analyses logs and never scans, probes or
 modifies other systems.
 
-> **Status:** log ingestion, detection, threat intelligence, alert triage, case
-> management, the dashboard and sign-in with roles are in place. A sample data
-> generator and benchmarks come next.
+## Features
+
+- **Log ingestion**: Linux `auth.log`/`secure`, Apache and Nginx access logs, Windows
+  Security and Sysmon events exported as JSON (Winlogbeat, EVTX converters, NXLog,
+  PowerShell), and any JSON lines. Formats are detected automatically; files can be plain,
+  UTF-16 or gzip. Upload from the browser with a progress bar or drop files into a watched
+  folder. Every event is deduplicated by hash and malformed lines are reported, not lost.
+- **One schema for everything**: an ECS-style normalised event with indexed columns for the
+  fields rules and searches use, plus the untouched original record.
+- **Detection engine**: Sigma-style YAML rules with match, threshold, sequence and new-value
+  logic, run automatically on every upload and on demand over any time range. 21 built-in
+  rules mapped to MITRE ATT&CK, each with a [write-up](docs/README.md). Rules can be edited,
+  validated and tested against pasted log lines in the browser.
+- **Threat intelligence**: a local indicator store fed by CSV or text feeds, matched against
+  every event during ingestion and against stored events when new indicators arrive.
+  Optional AbuseIPDB and VirusTotal lookups enrich alerts, with caching and rate limits;
+  private addresses are never sent anywhere.
+- **Investigation**: an alert queue with filters and bulk triage, a timeline around each
+  alert, cases with notes, pinned evidence and full history, Markdown and PDF reports, an
+  event search language, entity pages for hosts, users and addresses, and an ATT&CK matrix
+  of what fired.
+- **Dashboard**: alerts over time, by severity, top attacking addresses, targeted users and
+  noisiest rules, ingestion rate and time to resolve.
+- **Access control and audit**: sign-in with Argon2id passwords and short-lived sessions,
+  viewer, analyst and admin roles, CSRF protection, login throttling, strict security
+  headers and an audit log of every analyst action.
+- **Realistic test data and a benchmark**: a generator that writes logs for a fictional
+  company with six attacks hidden in normal activity, and a benchmark that times ingestion,
+  detection and search on a million events.
+
+## Screenshots
+
+| | |
+| --- | --- |
+| ![Dashboard](docs/screenshots/overview.png) | ![Alert queue](docs/screenshots/alerts.png) |
+| **Overview**: a week of generated data with the planted attacks | **Alert queue**: filters, owners and bulk triage |
+| ![Alert](docs/screenshots/alert.png) | ![Case](docs/screenshots/case.png) |
+| **Alert**: rule notes, threat intel and the timeline around it | **Case**: linked alerts, evidence, notes and history |
+| ![Event search](docs/screenshots/events.png) | ![ATT&CK matrix](docs/screenshots/mitre.png) |
+| **Event search**: hunting for the attacker's address and tools | **ATT&CK matrix**: techniques with alerts in the period |
+| ![Rule editor](docs/screenshots/rule.png) | ![Threat intel](docs/screenshots/intel.png) |
+| **Rule**: edit, validate and test against sample lines | **Threat intel**: indicator store and matches |
 
 ## Architecture
 
@@ -75,6 +114,18 @@ docker compose exec api watchpost create-user admin --role admin --full-name "Ad
 ```
 
 Then sign in at http://localhost:3000 and add everyone else from **Users**.
+
+To see it work on something realistic, generate a week of logs with attacks hidden in
+them and load them (details in [Sample data](#sample-data-and-attack-scenarios)):
+
+```bash
+docker compose exec api watchpost generate-logs --output /tmp/demo --events 200000
+docker compose cp api:/tmp/demo ./demo
+cp demo/*.log demo/*.jsonl watch/     # the worker ingests anything dropped into ./watch
+```
+
+Import `demo/iocs.csv` on the **Threat intel** page, and the alerts appear within a minute
+or two.
 
 ## Normalised event schema
 
@@ -186,6 +237,11 @@ for example after enabling or writing a rule.
   shared pass per log source), so a brute force split across two uploads is still caught.
 - **New value** rules compare each event with the entity's history over a lookback period.
 
+Those extra reads are narrowed in SQL first: when a rule requires plain values on indexed
+columns (`event.action: ssh_login`, `event.code: '4625'`), only matching rows are fetched,
+and new-value rules that only use normalised fields skip the raw record entirely. Python
+still evaluates every rule in full, so this can only skip rows that could never match.
+
 Hits become alerts grouped by rule and entity (`group_by`, e.g. the source IP). A partial
 unique index allows one *open* alert per group, so further hits update that alert's last
 seen time and event count instead of creating new alerts. Running detection twice over
@@ -261,35 +317,66 @@ lines**: the result shows which lines would fire, without storing anything.
 
 | Rule | Type | Severity | ATT&CK |
 | --- | --- | --- | --- |
-| SSH brute force | threshold | medium | T1110.001 |
-| SSH password spraying | threshold | medium | T1110.003 |
-| SSH brute force followed by a successful login | sequence | high | T1110.001, T1078 |
-| Login from a new source address | new value | medium | T1078 |
-| Local user account created on Linux | match | low | T1136.001 |
-| User added to a Linux admin group | match | high | T1098 |
-| Password hash file read with sudo | match | high | T1003.008 |
-| Windows logon brute force | threshold | medium | T1110 |
-| PowerShell with an encoded command | match | high | T1059.001, T1027 |
-| Windows event log cleared | match | high | T1070.001 |
-| Scheduled task created | match | medium | T1053.005 |
-| Windows user account created | match | low | T1136.001 |
-| Account added to a privileged Windows group | match | high | T1098 |
-| LSASS process memory accessed | match | critical | T1003.001 |
-| Office application started a shell or script host | match | high | T1566.001, T1204.002 |
-| Registry Run key persistence | match | medium | T1547.001 |
-| Web directory and file scanning | threshold | low | T1595.003 |
-| SQL injection attempt in a web request | match | high | T1190 |
-| Path traversal attempt in a web request | match | high | T1190, T1083 |
-| Known attack tool user agent | match | medium | T1595.002 |
-| Threat intel indicator match | match | high | (depends on the indicator) |
+| [SSH brute force](docs/rules/ssh-brute-force.md) | threshold | medium | T1110.001 |
+| [SSH password spraying](docs/rules/ssh-password-spraying.md) | threshold | medium | T1110.003 |
+| [SSH brute force followed by a successful login](docs/rules/ssh-brute-force-then-success.md) | sequence | high | T1110.001, T1078 |
+| [Login from a new source address](docs/rules/login-from-new-source-ip.md) | new value | medium | T1078 |
+| [Local user account created on Linux](docs/rules/linux-user-created.md) | match | low | T1136.001 |
+| [User added to a Linux admin group](docs/rules/linux-user-added-to-admin-group.md) | match | high | T1098 |
+| [Password hash file read with sudo](docs/rules/linux-shadow-file-access.md) | match | high | T1003.008 |
+| [Windows logon brute force](docs/rules/windows-logon-brute-force.md) | threshold | medium | T1110 |
+| [PowerShell with an encoded command](docs/rules/windows-encoded-powershell.md) | match | high | T1059.001, T1027 |
+| [Windows event log cleared](docs/rules/windows-audit-log-cleared.md) | match | high | T1070.001 |
+| [Scheduled task created](docs/rules/windows-scheduled-task-created.md) | match | medium | T1053.005 |
+| [Windows user account created](docs/rules/windows-user-account-created.md) | match | low | T1136.001 |
+| [Account added to a privileged Windows group](docs/rules/windows-user-added-to-admin-group.md) | match | high | T1098 |
+| [LSASS process memory accessed](docs/rules/sysmon-lsass-memory-access.md) | match | critical | T1003.001 |
+| [Office application started a shell or script host](docs/rules/office-app-spawns-shell.md) | match | high | T1566.001, T1204.002 |
+| [Registry Run key persistence](docs/rules/sysmon-registry-run-key.md) | match | medium | T1547.001 |
+| [Web directory and file scanning](docs/rules/web-directory-scanning.md) | threshold | low | T1595.003 |
+| [SQL injection attempt in a web request](docs/rules/web-sql-injection.md) | match | high | T1190 |
+| [Path traversal attempt in a web request](docs/rules/web-path-traversal.md) | match | high | T1190, T1083 |
+| [Known attack tool user agent](docs/rules/web-scanner-user-agent.md) | match | medium | T1595.002 |
+| [Threat intel indicator match](docs/rules/threat-intel-indicator-match.md) | match | high | (depends on the indicator) |
 
-Together they map to 19 techniques across 8 of the 14 ATT&CK tactics (Reconnaissance,
-Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential
-Access and Discovery); lateral movement, collection, command and control, exfiltration and
-impact are not covered yet. Each rule documents the attack, the evidence it looks for and
-known false positives, and is tested against a matching and a non-matching example built
-from real log lines. All 21 fire on the logs in `samples/` (the indicator match once
-`samples/iocs.csv` has been imported).
+Each rule has a [write-up](docs/README.md) explaining the attack, the log evidence and
+the detection logic, and is tested against a matching and a non-matching example built
+from real log lines. All 21 fire on the logs in `samples/` and on the
+[generated data set](#sample-data-and-attack-scenarios) (the indicator match once the
+accompanying `iocs.csv` has been imported).
+
+### MITRE ATT&CK coverage
+
+| Tactic | Technique | Rules |
+| --- | --- | --- |
+| Reconnaissance (TA0043) | T1595.002 Vulnerability Scanning | [Known attack tool user agent](docs/rules/web-scanner-user-agent.md) |
+| | T1595.003 Wordlist Scanning | [Web directory and file scanning](docs/rules/web-directory-scanning.md) |
+| Initial Access (TA0001) | T1190 Exploit Public-Facing Application | [SQL injection](docs/rules/web-sql-injection.md), [path traversal](docs/rules/web-path-traversal.md) |
+| | T1078 Valid Accounts | [SSH brute force then login](docs/rules/ssh-brute-force-then-success.md), [login from a new address](docs/rules/login-from-new-source-ip.md) |
+| | T1566.001 Spearphishing Attachment | [Office application started a shell](docs/rules/office-app-spawns-shell.md) |
+| Execution (TA0002) | T1059.001 PowerShell | [Encoded PowerShell](docs/rules/windows-encoded-powershell.md) |
+| | T1204.002 Malicious File | [Office application started a shell](docs/rules/office-app-spawns-shell.md) |
+| | T1053.005 Scheduled Task | [Scheduled task created](docs/rules/windows-scheduled-task-created.md) |
+| Persistence (TA0003) | T1136.001 Local Account | [Linux user created](docs/rules/linux-user-created.md), [Windows user created](docs/rules/windows-user-account-created.md) |
+| | T1098 Account Manipulation | [Linux admin group](docs/rules/linux-user-added-to-admin-group.md), [Windows privileged group](docs/rules/windows-user-added-to-admin-group.md) |
+| | T1053.005 Scheduled Task | [Scheduled task created](docs/rules/windows-scheduled-task-created.md) |
+| | T1547.001 Registry Run Keys | [Registry Run key persistence](docs/rules/sysmon-registry-run-key.md) |
+| Privilege Escalation (TA0004) | T1098 Account Manipulation | [Linux admin group](docs/rules/linux-user-added-to-admin-group.md), [Windows privileged group](docs/rules/windows-user-added-to-admin-group.md) |
+| | T1053.005 Scheduled Task | [Scheduled task created](docs/rules/windows-scheduled-task-created.md) |
+| | T1547.001 Registry Run Keys | [Registry Run key persistence](docs/rules/sysmon-registry-run-key.md) |
+| Defense Evasion (TA0005) | T1027 Obfuscated Files or Information | [Encoded PowerShell](docs/rules/windows-encoded-powershell.md) |
+| | T1070.001 Clear Windows Event Logs | [Windows event log cleared](docs/rules/windows-audit-log-cleared.md) |
+| Credential Access (TA0006) | T1110 Brute Force | [Windows logon brute force](docs/rules/windows-logon-brute-force.md) |
+| | T1110.001 Password Guessing | [SSH brute force](docs/rules/ssh-brute-force.md), [SSH brute force then login](docs/rules/ssh-brute-force-then-success.md) |
+| | T1110.003 Password Spraying | [SSH password spraying](docs/rules/ssh-password-spraying.md) |
+| | T1003.001 LSASS Memory | [LSASS process memory accessed](docs/rules/sysmon-lsass-memory-access.md) |
+| | T1003.008 /etc/passwd and /etc/shadow | [Password hash file read with sudo](docs/rules/linux-shadow-file-access.md) |
+| Discovery (TA0007) | T1083 File and Directory Discovery | [Path traversal](docs/rules/web-path-traversal.md) |
+
+That is 19 techniques across 8 of the 14 enterprise tactics. Resource Development,
+Lateral Movement, Collection, Command and Control, Exfiltration and Impact have no rules
+yet; the [indicator match rule](docs/rules/threat-intel-indicator-match.md) catches known
+command-and-control infrastructure, but not the behaviour itself.
 
 ## Threat intelligence
 
@@ -537,11 +624,138 @@ or target. Entries cannot be edited or deleted through the app.
 - **Secrets:** production refuses to start without `WATCHPOST_SECRET_KEY`. Only
   `.env.example` is in the repository; the real `.env` is ignored by git.
 
+## Sample data and attack scenarios
+
+`watchpost generate-logs` writes a realistic data set for a small fictional company:
+four Linux servers, a web shop, a Windows domain with eighteen workstations, and the people
+who use them. Normal activity follows a working week (busy afternoons, quiet nights and
+weekends): SSH sessions with sudo, cron jobs, nightly backups, shop visits, health checks
+and crawlers, domain logons and Kerberos tickets, application launches, DNS lookups and
+downloads. Six attacks are hidden in it:
+
+| Attack | Category | Logs | Rules that catch it |
+| --- | --- | --- | --- |
+| SSH brute force from 203.0.113.45 ending in a password login as `backup` | Brute force | `auth.log` | SSH brute force, password spraying, brute force then login, login from a new address, indicator match |
+| `backup` reads `/etc/shadow`, creates `svc-update`, adds it to `sudo` and installs a cron job | Privilege escalation, persistence | `auth.log` | Shadow file read, Linux user created, Linux admin group |
+| Nikto, then sqlmap and path traversal against the shop from 198.51.100.23 | Web attack | `access.log` | Directory scanning, scanner user agent, SQL injection, path traversal, indicator match |
+| 24 failed network logons on DC01 from 203.0.113.80, then a success as `administrator` | Brute force | Windows Security | Windows logon brute force, login from a new address, indicator match |
+| Encoded PowerShell, a new account added to Administrators, a logon task, the Security log cleared | Privilege escalation, persistence, defense evasion | Windows Security | Encoded PowerShell, user created, privileged group, scheduled task, log cleared |
+| A macro document starts encoded PowerShell that contacts its C2, drops a credential dumper that reads LSASS, and adds a Run key | Execution, credential access, persistence | Sysmon | Office spawns a shell, encoded PowerShell, LSASS access, Run key, indicator match |
+
+```bash
+uv run watchpost generate-logs --output demo --events 200000 --days 7   # from backend/
+```
+
+It writes `auth.log`, `access.log`, `windows_security.jsonl` and `sysmon.jsonl`, a threat
+intel feed with the attackers' infrastructure (`iocs.csv`), and `scenarios.json`, which
+lists each attack with its time window and the rules expected to fire. Options: `--events`
+(the exact total, default 100,000), `--days` (1-90), `--end` (default: the current hour) and
+`--seed` (the same seed always produces the same files).
+
+Only private and documentation address ranges are used (`10.0.0.0/8`, `192.168.0.0/16`,
+`203.0.113.0/24`, `198.51.100.0/24`) and every name is made up. Each person always logs in
+from the same address and only ever mistypes a password once or twice, so the normal
+activity raises no alerts at all: an integration test ingests a generated set and checks
+that every built-in rule fires and that every alert belongs to a planted attack.
+
+## Performance
+
+`watchpost benchmark` generates a data set, loads it into a dedicated database and measures
+the three things that matter at scale: how fast events go in, how long a full detection
+pass takes, and how quickly searches answer. Ingestion runs through ordinary ingestion jobs
+(parsing, indicator matching and inserts, exactly as the worker does them), detection runs
+all 21 rules over every stored event, and searches go through the HTTP API as a signed-in
+user, ten timed runs each after a warm-up.
+
+```bash
+# from backend/; the database name must contain 'bench' because its schema is rebuilt
+uv run watchpost benchmark --database-url postgresql+asyncpg://watchpost:watchpost@localhost:5432/watchpost_bench
+# or inside the stack
+docker compose exec api watchpost benchmark --work-dir /tmp/bench \
+  --database-url postgresql+asyncpg://watchpost:watchpost@db:5432/watchpost_bench
+```
+
+Results go to `benchmark-results.json` and `benchmark-results.md` in the work folder.
+
+### Results on one million events
+
+Measured on a laptop (Intel Core i7-8665U, 4 cores / 8 threads, 16 GB RAM, Windows 11)
+with Python 3.12.10 and PostgreSQL 17.11 on the same machine, default settings, one
+ingestion job at a time. Both runs use the same data set settings (seed 7). *Before* is the
+code as it was when the benchmark was added; *after* includes the changes described below.
+
+| | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| Ingest 1,000,000 events | 20.0 min (833/s) | 7.1 min (2,334/s) | 2.8x faster |
+| Detection, 21 rules over every event | 4.8 min | 2.2 min | 2.2x faster |
+| Search for a rare command line (median) | 984 ms | 14 ms | 70x faster |
+
+Ingestion per file, after:
+
+| File | Events | Time | Events/s | Before |
+| --- | ---: | ---: | ---: | ---: |
+| `auth.log` | 250,000 | 77 s | 3,264 | 657 |
+| `access.log` | 450,000 | 191 s | 2,355 | 1,273 |
+| `windows_security.jsonl` | 200,000 | 104 s | 1,927 | 655 |
+| `sysmon.jsonl` | 100,000 | 57 s | 1,755 | 619 |
+
+Search response times through the API, after (50 results per page, newest first):
+
+| Search | Request | Median | p95 |
+| --- | --- | ---: | ---: |
+| Newest events, no filter | `/api/events` | 16 ms | 18 ms |
+| One address (indexed column) | `/api/events source.ip:203.0.113.45` | 14 ms | 16 ms |
+| User and outcome | `/api/events user.name:backup AND event.outcome:success` | 16 ms | 21 ms |
+| Status code outside a network | `/api/events status:404 AND NOT source.ip:10.0.0.0/8` | 28 ms | 30 ms |
+| Failures in the last 24 hours | `/api/events outcome:failure` | 21 ms | 22 ms |
+| Free text | `/api/events "Failed password"` | 392 ms | 532 ms |
+| Substring of a command line | `/api/events process.command_line:sekurlsa` | 14 ms | 15 ms |
+| Field inside the raw record | `/api/events raw.event_data.TargetImage:*lsass*` | 33 ms | 34 ms |
+| Dashboard, last 7 days | `/api/dashboard 7d` | 301 ms | 374 ms |
+| Alert queue | `/api/alerts` | 15 ms | 15 ms |
+
+The detection run raised 27 alerts, every one of them for a planted attack.
+
+### What was profiled and changed
+
+1. **Event inserts** (ingestion, 7-14x faster inserts). Profiling a single job showed 85% of
+   the time in `insert_events`. The insert passed the ORM entity, so SQLAlchemy used its
+   bulk-insert path, which leaves `NULL` columns out of each row and groups rows by which
+   columns are set: a batch of `auth.log` events became 1,729 statements for 2,000 rows.
+   Batches are now copied with `COPY` into a per-connection temporary table and moved into
+   `events` with a single `INSERT ... SELECT ... ON CONFLICT DO NOTHING RETURNING`, which keeps
+   deduplication on the event hash.
+2. **Row conversion** (2x faster). Each field's attribute path was split from its dotted
+   name for every field of every event; it is now computed once with prepared getters.
+3. **New-value rules** (detection). For every login, the rule walked the user's whole
+   30-day history to build a set of earlier addresses, which is quadratic for busy
+   accounts. Each history is now sorted per value and answered with a binary search.
+4. **Detection queries** (detection). Threshold, sequence and new-value rules read events
+   again around the scope, and those queries returned every event of the log source or
+   user. Plain values a rule requires (`event.action: ssh_login`, `event.code: '4625'`) now
+   become SQL conditions, and the new-value history reads only the columns the rule uses.
+   On one day of data the follow-up queries went from 384,000 rows to 89,000.
+5. **Substring search on command lines** (search). Finding a rare tool name read the whole
+   table; a `pg_trgm` GIN index on `process_command_line` answers it from the index. It
+   costs 7 MB at a million events because only process events have a command line.
+
+One idea did not survive measurement: checking a whole list of rule values against one
+lower-cased string instead of one value at a time made no difference to matching speed,
+so it was left out.
+
+The slowest part is now parsing, which is pure Python and runs on one core per ingestion
+job: the access log parses at about 6,000 lines a second and the JSON formats at about
+5,000. Inserts into a table that already holds a few hundred thousand rows also slow down
+as its indexes grow, which is part of why the two Windows logs, ingested last and with the
+largest raw records, have the lowest rates. Free-text search is the slowest query: messages and URLs
+are not indexed, so a rare phrase means reading back through the table until 50 matches
+turn up. See [Future improvements](#future-improvements).
+
 ## Data model
 
 | Table | Purpose |
 | --- | --- |
-| `events` | Normalised log events. Unique `event_hash` (SHA-256 of source + raw line) deduplicates re-ingested data. Indexed by time and by entity (IP, user, host). |
+| `events` | Normalised log events. Unique `event_hash` (SHA-256 of source + raw line) deduplicates re-ingested data. Indexed by time and by entity (IP, user, host), with a trigram index on command lines for substring searches. |
 | `rules` | Detection rules: Sigma-style YAML source plus parsed definition, severity, ATT&CK tactics/techniques, enabled flag, and whether it is built-in or custom. |
 | `detection_runs` | One row per pass of the rules over an ingestion job's events, a time range, or the period with new threat-intel matches, with what it scanned and the alerts it created or updated. |
 | `alerts` | Rule hits. A partial unique index on `group_key` for open alerts makes repeated hits update one alert instead of creating hundreds. |
@@ -571,6 +785,7 @@ uv run alembic upgrade head               # needs WATCHPOST_DATABASE_URL
 uv run watchpost sync-rules               # load backend/rules/ into the database
 uv run uvicorn watchpost.api.app:create_app --factory --reload
 uv run arq watchpost.worker.settings.WorkerSettings
+uv run watchpost generate-logs --output demo # realistic logs with planted attacks
 ```
 
 Checks:
@@ -620,6 +835,8 @@ backend/
     investigation/  alert triage, cases, timelines, entity profiles, ATT&CK matrix, reports
     search/      the event query language: parser and SQL compiler
     auth/        session tokens, sign-in checks and the login throttle
+    datagen/     the synthetic log generator and its attack scenarios
+    benchmark.py ingestion, detection and search timings
     accounts.py, audit.py, cli.py   users, the audit trail and the `watchpost` command
     dashboard.py the overview figures
     api/         FastAPI app factory, middleware, dependencies, routes
@@ -629,10 +846,35 @@ backend/
   tests/         unit/ (no services) and integration/ (PostgreSQL)
 frontend/
   src/           React app: api client, components, pages
+docs/            one write-up per detection rule, screenshots
 samples/         example logs for every supported format
 watch/           drop files here for the folder watcher
 docker-compose.yml
 ```
+
+## Future improvements
+
+- **More ATT&CK coverage**: lateral movement (remote service creation, PsExec-style logons,
+  RDP from servers), command and control (beaconing intervals, rare domains), exfiltration
+  (unusual outbound volume) and Linux persistence through cron and authorized_keys, which
+  the generated attack already performs but no rule catches.
+- **More log sources**: firewall and DNS server logs, cloud audit trails (CloudTrail, Entra
+  ID sign-ins), and a syslog/HTTP listener so agents can ship events directly instead of
+  writing files.
+- **Faster parsing**: parsing is now the slowest part of ingestion. Running parsers in a
+  process pool, or moving the hottest regular expressions and JSON handling to a compiled
+  extension, would let one worker use every core.
+- **Faster free text**: a full-text index (`tsvector`) on messages and URLs, so rare phrases
+  are found from the index instead of by reading back through the table.
+- **Scaling the event store**: monthly partitions of the `events` table with a retention
+  policy, and a columnar or search engine back end (ClickHouse, OpenSearch) behind the same
+  query language for deployments well beyond tens of millions of events.
+- **Smarter detection**: compiling simple match rules to SQL so the database filters events
+  before Python sees them, correlation rules that join alerts across hosts, and per-entity
+  baselines instead of fixed thresholds.
+- **Response**: notifications to chat or e-mail, playbooks attached to rules, and sharing
+  cases with external responders.
+- **Identity**: single sign-on with OIDC or SAML and multi-factor authentication.
 
 ## License
 
