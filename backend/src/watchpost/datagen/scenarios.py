@@ -276,6 +276,44 @@ PROBE_PATHS = (
     "/old/",
     "/test.php",
 )
+# Content discovery wordlists try each name with several suffixes.
+PROBE_WORDS = (
+    "admin",
+    "backup",
+    "dev",
+    "staging",
+    "config",
+    "db",
+    "uploads",
+    "private",
+    "tmp",
+    "logs",
+    "install",
+    "setup",
+    "api",
+    "data",
+    "dump",
+    "secret",
+    "site",
+    "web",
+    "portal",
+    "manager",
+)
+PROBE_SUFFIXES = ("/", ".php", ".bak", ".zip", ".old", ".tar.gz")
+SCANNER_PROBES = 120
+
+
+def scanner_probes() -> list[str]:
+    """The paths the scanner requests, in order: known files first, then a wordlist."""
+    paths = list(PROBE_PATHS)
+    for suffix in PROBE_SUFFIXES:
+        for word in PROBE_WORDS:
+            path = f"/{word}{suffix}"
+            if path not in paths:
+                paths.append(path)
+    return paths[:SCANNER_PROBES]
+
+
 SQL_PAYLOADS = (
     "1%27%20OR%20%271%27=%271",
     "1%20UNION%20SELECT%20NULL,username,password%20FROM%20users--",
@@ -309,10 +347,7 @@ def web_attack(rng: random.Random, start: float, out: Timeline) -> Scenario:
             fixed=True,
         )
 
-    for test in range(1, 121):
-        path = PROBE_PATHS[test % len(PROBE_PATHS)]
-        if test > len(PROBE_PATHS):
-            path = f"{path.rstrip('/')}{test}"
+    for test, path in enumerate(scanner_probes(), start=1):
         request(path, 404 if test % 9 else 403, 196, NIKTO.format(test=test), rng.uniform(0.2, 0.7))
     at += rng.uniform(120, 300)
     for round_ in range(4):
