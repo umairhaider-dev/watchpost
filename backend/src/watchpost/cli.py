@@ -1,8 +1,9 @@
 """Command-line entry point: ``watchpost <command>``.
 
 Commands:
-    sync-rules    load the built-in rule files into the database
-    create-user   add an analyst, admin or viewer account
+    sync-rules      load the built-in rule files into the database
+    create-user     add an analyst, admin or viewer account
+    generate-logs   write realistic sample logs with attacks hidden in them
 """
 
 from __future__ import annotations
@@ -13,12 +14,14 @@ import getpass
 import logging
 import sys
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 from watchpost.accounts import AccountError, create_user
 from watchpost.core.config import Settings, get_settings
 from watchpost.core.logging import configure_logging
 from watchpost.core.passwords import WeakPasswordError, check_password_policy
+from watchpost.datagen import GeneratorConfig, GeneratorError, generate
 from watchpost.db.models import UserRole
 from watchpost.db.session import create_engine, create_session_factory
 from watchpost.detection.errors import RuleError
@@ -76,6 +79,41 @@ def read_password(from_stdin: bool) -> str | None:
     return first
 
 
+def utc_datetime(value: str) -> datetime:
+    """An ISO 8601 time from the command line; times without an offset are UTC."""
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError as exc:
+        msg = f"not an ISO 8601 time: {value!r}"
+        raise argparse.ArgumentTypeError(msg) from exc
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def generate_logs(args: argparse.Namespace) -> int:
+    """Write the synthetic data set; returns a process exit code."""
+    config = GeneratorConfig(events=args.events, days=args.days, end=args.end, seed=args.seed)
+    try:
+        manifest = generate(config, args.output)
+    except GeneratorError as exc:
+        logger.error("Could not generate logs: %s", exc)
+        return 1
+    logger.info(
+        "Wrote %d events from %s to %s into %s",
+        manifest.events,
+        manifest.start.isoformat(),
+        manifest.end.isoformat(),
+        args.output,
+    )
+    for scenario in manifest.scenarios:
+        logger.info(
+            "Planted %s at %s: %s",
+            scenario.id,
+            datetime.fromtimestamp(scenario.start, UTC).isoformat(timespec="seconds"),
+            scenario.title,
+        )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="watchpost", description="Watchpost administration")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -94,6 +132,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--password-stdin",
         action="store_true",
         help="read the password from the first line of standard input instead of prompting",
+    )
+
+    logs = commands.add_parser(
+        "generate-logs", help="write realistic sample logs with attacks hidden in them"
+    )
+    logs.add_argument(
+        "--output",
+        type=Path,
+        default=Path("generated"),
+        help="folder to write (created if missing)",
+    )
+    logs.add_argument("--events", type=int, default=100_000, help="total number of events")
+    logs.add_argument("--days", type=int, default=7, help="how many days the logs cover")
+    logs.add_argument("--seed", type=int, default=7, help="same seed, same logs")
+    logs.add_argument(
+        "--end", type=utc_datetime, help="last moment covered, ISO 8601 (default: this hour)"
     )
     return parser
 
@@ -114,6 +168,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             logger.error("Could not create the user: %s", exc)
             return 1
         return asyncio.run(add_user(settings, args, password))
+    if args.command == "generate-logs":
+        return generate_logs(args)
     return 2  # pragma: no cover - argparse rejects unknown commands
 
 

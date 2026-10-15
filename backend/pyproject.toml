@@ -85,6 +85,8 @@ ignore = [
 # Tests hold long literal log lines, sample IPs like 0.0.0.0 and simple file I/O.
 "tests/**" = ["S101", "S104", "S105", "S106", "PLR0915", "E501", "ASYNC240"]
 "alembic/**" = ["N999"]
+# Synthetic data is meant to be reproducible from a seed, not unpredictable.
+"src/watchpost/datagen/**" = ["S311"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["watchpost"]
