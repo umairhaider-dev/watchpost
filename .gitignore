@@ -27,6 +27,12 @@ coverage/
 watch/*
 !watch/.gitkeep
 
+# Local runtime data, generated logs and benchmark results
+/backend/data/
+generated/
+demo/
+benchmark/
+
 # Editors and OS
 .idea/
 .vscode/
