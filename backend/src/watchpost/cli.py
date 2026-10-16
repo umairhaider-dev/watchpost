@@ -75,7 +75,9 @@ async def add_user(settings: Settings, args: argparse.Namespace, password: str) 
 def read_password(from_stdin: bool) -> str | None:
     """The new password, from the first line of stdin or typed twice at a prompt."""
     if from_stdin:
-        return sys.stdin.readline().rstrip("\r\n")
+        # Windows PowerShell puts a byte order mark in front of text it pipes to
+        # other programs; it is never part of the password the user typed.
+        return sys.stdin.readline().rstrip("\r\n").removeprefix("\ufeff")
     first = getpass.getpass("Password: ")
     if first != getpass.getpass("Repeat password: "):
         logger.error("The passwords do not match")

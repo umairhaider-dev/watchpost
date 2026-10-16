@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from watchpost.accounts import AccountError, assignable_user, create_user
 from watchpost.audit import history, record
-from watchpost.cli import main
+from watchpost.cli import main, read_password
 from watchpost.core.config import Settings
 from watchpost.core.passwords import WeakPasswordError, verify_password
 from watchpost.db.models import User, UserRole
@@ -160,6 +160,15 @@ async def test_cli_create_user(
     finally:
         async with engine.begin() as conn:
             await conn.execute(delete(User).where(User.username == "cli.analyst"))
+
+
+def test_password_from_stdin_ignores_line_endings_and_a_byte_order_mark(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # What Windows PowerShell sends for: "secret phrase" | watchpost create-user ...
+    monkeypatch.setattr("sys.stdin", io.StringIO("\ufeffcorrect horse battery\r\n"))
+
+    assert read_password(from_stdin=True) == "correct horse battery"
 
 
 def test_cli_rejects_weak_or_mismatched_passwords(
