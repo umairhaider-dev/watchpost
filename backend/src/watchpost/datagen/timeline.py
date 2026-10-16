@@ -39,10 +39,6 @@ class Timeline:
             timestamp, _, line, fixed = heapq.heappop(heap)
             yield timestamp, line, fixed
 
-    def drain(self) -> Iterator[tuple[float, str, bool]]:
-        """Remove and yield everything that is left, oldest first."""
-        return self.due(float("inf"))
-
 
 class LogWriter:
     """Writes lines to a file and counts them, dropping exact repeats.

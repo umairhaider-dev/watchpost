@@ -26,18 +26,16 @@ BENCH_URL = (
 )
 
 
-def config(tmp_path: Path, **overrides: object) -> BenchmarkConfig:
-    values: dict[str, object] = {
-        "database_url": BENCH_URL,
-        "work_dir": tmp_path,
-        "rules_dir": BACKEND_DIR / "rules",
-        "alembic_ini": BACKEND_DIR / "alembic.ini",
-        "events": 3_000,
-        "days": 1,
-        "repeats": 2,
-    }
-    values.update(overrides)
-    return BenchmarkConfig(**values)  # type: ignore[arg-type]
+def config(tmp_path: Path) -> BenchmarkConfig:
+    return BenchmarkConfig(
+        database_url=BENCH_URL,
+        work_dir=tmp_path,
+        rules_dir=BACKEND_DIR / "rules",
+        alembic_ini=BACKEND_DIR / "alembic.ini",
+        events=3_000,
+        days=1,
+        repeats=2,
+    )
 
 
 async def test_measures_every_step(settings: Settings, tmp_path: Path) -> None:

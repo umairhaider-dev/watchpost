@@ -218,7 +218,8 @@ async def prepare_database(url: str, alembic_ini: Path) -> None:
                 text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": name}
             )
             if not exists:
-                await conn.execute(text(f'CREATE DATABASE "{name}"'))
+                quoted = name.replace('"', '""')
+                await conn.execute(text(f'CREATE DATABASE "{quoted}"'))
     finally:
         await admin.dispose()
     engine = create_async_engine(url)

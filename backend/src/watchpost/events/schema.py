@@ -1,10 +1,10 @@
 """Pydantic model for a normalised event (inspired by Elastic Common Schema).
 
 Parsers build :class:`NormalizedEvent` instances; the ingestion pipeline turns
-them into ``events`` rows with :meth:`NormalizedEvent.to_row`, and the
-detection engine reads them through :meth:`NormalizedEvent.flatten`, which
-uses the same dotted names as the rule YAML (``source.ip``,
-``process.command_line``, ...).
+them into ``events`` rows with :meth:`NormalizedEvent.to_row`, which is what
+the detection engine and the search read back. :meth:`NormalizedEvent.flatten`
+gives the same values keyed by the dotted names rules and queries use
+(``source.ip``, ``process.command_line``, ...).
 """
 
 from __future__ import annotations
