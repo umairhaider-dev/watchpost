@@ -23,6 +23,8 @@ export default defineConfig(({ mode }) => {
       setupFiles: ['./src/test/setup.ts'],
       restoreMocks: true,
       css: false,
+      // Room for the longer async waits configured in src/test/setup.ts.
+      testTimeout: 15_000,
     },
   };
 });
